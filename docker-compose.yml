@@ -44,6 +44,7 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
+    image: decision-backend:latest
     container_name: decision-backend
     environment:
       - DATABASE_URL=postgresql://${DB_USER:-postgres}:${DB_PASSWORD:-postgres}@postgres:5432/${DB_NAME:-decision}
@@ -73,9 +74,7 @@ services:
 
   # Celery Worker
   celery-worker:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
+    image: decision-backend:latest
     container_name: decision-celery-worker
     command: celery -A tasks.celery_app worker --loglevel=info
     environment:
@@ -94,13 +93,13 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      backend:
+        condition: service_started
     restart: unless-stopped
 
   # Celery Beat (Scheduler)
   celery-beat:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
+    image: decision-backend:latest
     container_name: decision-celery-beat
     command: celery -A tasks.celery_app beat --loglevel=info
     environment:
@@ -119,6 +118,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      backend:
+        condition: service_started
     restart: unless-stopped
 
   # Frontend
@@ -129,11 +130,7 @@ services:
     container_name: decision-frontend
     environment:
       - NEXT_PUBLIC_API_URL=http://localhost:8000
-      - NODE_ENV=${NODE_ENV:-development}
-    volumes:
-      - ./frontend:/app
-      - /app/node_modules
-      - /app/.next
+      - NODE_ENV=${NODE_ENV:-production}
     ports:
       - "3000:3000"
     networks:

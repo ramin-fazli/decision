@@ -8,13 +8,19 @@ WORKDIR /app
 
 # Install dependencies based on the preferred package manager
 COPY package.json package-lock.json* ./
-RUN npm ci --only=production
+RUN \
+  if [ -f package-lock.json ]; then npm ci --only=production; \
+  else echo "package-lock.json not found." && npm install --only=production; \
+  fi
 
 # Rebuild the source code only when needed
 FROM base AS builder
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
+
+# Install all dependencies (including dev dependencies for building)
+RUN npm install
 
 # Set environment variables for build
 ENV NEXT_TELEMETRY_DISABLED=1

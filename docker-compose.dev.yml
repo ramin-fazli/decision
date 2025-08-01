@@ -1,0 +1,28 @@
+version: '3.8'
+
+services:
+  # Frontend Development Override
+  frontend:
+    environment:
+      - NODE_ENV=development
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+      - /app/.next
+    command: npm run dev
+    
+  # Backend Development Override  
+  backend:
+    volumes:
+      - ./backend:/app
+    command: uvicorn api.main:app --host 0.0.0.0 --port 8000 --reload
+    
+  # Celery Worker Development Override
+  celery-worker:
+    volumes:
+      - ./backend:/app
+      
+  # Celery Beat Development Override  
+  celery-beat:
+    volumes:
+      - ./backend:/app
