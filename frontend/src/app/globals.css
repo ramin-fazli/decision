@@ -1,0 +1,201 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    font-feature-settings: 'cv11', 'ss01';
+    font-variation-settings: 'opsz' 32;
+  }
+  
+  body {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+}
+
+@layer components {
+  /* Custom component styles */
+  .btn-primary {
+    @apply inline-flex items-center justify-center rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow-sm transition-colors hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+  
+  .btn-secondary {
+    @apply inline-flex items-center justify-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm transition-colors hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+  
+  .btn-ghost {
+    @apply inline-flex items-center justify-center rounded-md px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+  
+  .card {
+    @apply rounded-lg border border-gray-200 bg-white shadow-sm;
+  }
+  
+  .card-header {
+    @apply px-6 py-4 border-b border-gray-200;
+  }
+  
+  .card-content {
+    @apply px-6 py-4;
+  }
+  
+  .input-field {
+    @apply block w-full rounded-md border border-gray-300 px-3 py-2 text-sm placeholder-gray-400 shadow-sm transition-colors focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-gray-50 disabled:opacity-50;
+  }
+  
+  .label {
+    @apply block text-sm font-medium text-gray-700 mb-1;
+  }
+  
+  .text-error {
+    @apply text-sm text-red-600;
+  }
+  
+  .gradient-bg {
+    @apply bg-gradient-to-br from-blue-50 via-white to-purple-50;
+  }
+  
+  .hero-gradient {
+    @apply bg-gradient-to-r from-blue-600 via-purple-600 to-indigo-700;
+  }
+  
+  /* Loading spinner */
+  .spinner {
+    @apply animate-spin rounded-full border-2 border-gray-200 border-t-blue-600;
+  }
+  
+  /* Dashboard styles */
+  .dashboard-card {
+    @apply bg-white rounded-lg shadow-sm border border-gray-200 hover:shadow-md transition-shadow duration-200;
+  }
+  
+  .metric-card {
+    @apply bg-white rounded-lg p-6 shadow-sm border border-gray-200;
+  }
+  
+  .metric-value {
+    @apply text-2xl font-bold text-gray-900;
+  }
+  
+  .metric-label {
+    @apply text-sm font-medium text-gray-500 uppercase tracking-wide;
+  }
+  
+  .metric-change {
+    @apply text-sm font-medium;
+  }
+  
+  .metric-change.positive {
+    @apply text-green-600;
+  }
+  
+  .metric-change.negative {
+    @apply text-red-600;
+  }
+}
+
+@layer utilities {
+  /* Custom utility classes */
+  .text-gradient {
+    @apply bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent;
+  }
+  
+  .animation-delay-200 {
+    animation-delay: 0.2s;
+  }
+  
+  .animation-delay-400 {
+    animation-delay: 0.4s;
+  }
+  
+  .animation-delay-600 {
+    animation-delay: 0.6s;
+  }
+  
+  /* Scrollbar styles */
+  .scrollbar-thin {
+    scrollbar-width: thin;
+    scrollbar-color: rgb(156 163 175) rgb(249 250 251);
+  }
+  
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 6px;
+  }
+  
+  .scrollbar-thin::-webkit-scrollbar-track {
+    background: rgb(249 250 251);
+  }
+  
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    background: rgb(156 163 175);
+    border-radius: 3px;
+  }
+  
+  .scrollbar-thin::-webkit-scrollbar-thumb:hover {
+    background: rgb(107 114 128);
+  }
+}
+
+/* Custom animations */
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fadeInDown {
+  from {
+    opacity: 0;
+    transform: translateY(-30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes slideInRight {
+  from {
+    opacity: 0;
+    transform: translateX(30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.animate-fade-in-up {
+  animation: fadeInUp 0.6s ease-out forwards;
+}
+
+.animate-fade-in-down {
+  animation: fadeInDown 0.6s ease-out forwards;
+}
+
+.animate-slide-in-right {
+  animation: slideInRight 0.6s ease-out forwards;
+}
+
+/* Chart and visualization styles */
+.recharts-responsive-container {
+  @apply rounded-lg;
+}
+
+.recharts-cartesian-grid-horizontal line,
+.recharts-cartesian-grid-vertical line {
+  @apply stroke-gray-200;
+}
+
+/* Dark mode support (when implemented) */
+@media (prefers-color-scheme: dark) {
+  .dark {
+    color-scheme: dark;
+  }
+}

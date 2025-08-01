@@ -12,12 +12,18 @@ from core.config import settings
 
 logger = logging.getLogger(__name__)
 
-# Create SQLAlchemy engine
+# Create SQLAlchemy engine with better connection handling
 engine = create_engine(
     settings.DATABASE_URL,
-    poolclass=StaticPool,
-    connect_args={"check_same_thread": False} if "sqlite" in settings.DATABASE_URL else {},
-    echo=settings.DEBUG
+    connect_args={
+        "connect_timeout": 30,
+        "options": "-c statement_timeout=30s"
+    } if "postgresql" in settings.DATABASE_URL else {
+        "check_same_thread": False
+    },
+    echo=settings.DEBUG,
+    pool_recycle=3600,  # Recycle connections every hour
+    pool_pre_ping=True  # Verify connections before use
 )
 
 # Create SessionLocal class
@@ -43,18 +49,37 @@ def get_db():
 
 
 async def init_db():
-    """Initialize database tables"""
-    try:
-        # Import all models to ensure they are registered with SQLAlchemy
-        from models import user, prediction, dataset  # noqa
-        
-        # Create all tables
-        Base.metadata.create_all(bind=engine)
-        logger.info("Database tables created successfully")
-        
-    except Exception as e:
-        logger.error(f"Failed to initialize database: {e}")
-        raise
+    """Initialize database tables with retry logic"""
+    import time
+    max_retries = 3
+    retry_delay = 5  # seconds
+    
+    for attempt in range(max_retries):
+        try:
+            logger.info(f"Attempting database connection (attempt {attempt + 1}/{max_retries})")
+            
+            # Import all models to ensure they are registered with SQLAlchemy
+            from models import user, prediction, dataset  # noqa
+            
+            # Test connection first
+            with engine.connect() as conn:
+                logger.info("Database connection successful")
+            
+            # Create all tables
+            Base.metadata.create_all(bind=engine)
+            logger.info("Database tables created successfully")
+            return
+            
+        except Exception as e:
+            logger.error(f"Failed to initialize database (attempt {attempt + 1}): {e}")
+            
+            if attempt < max_retries - 1:
+                logger.info(f"Retrying in {retry_delay} seconds...")
+                time.sleep(retry_delay)
+                retry_delay *= 2  # Exponential backoff
+            else:
+                logger.error("All database connection attempts failed")
+                raise
 
 
 async def close_db():

@@ -86,8 +86,16 @@ else
     source venv/bin/activate
 fi
 pip install --upgrade pip
-pip install -r requirements.txt
-echo "✅ Installed Python dependencies"
+
+# Install core dependencies first for faster setup
+echo "📦 Installing core dependencies..."
+pip install -r requirements-core.txt
+echo "✅ Installed core Python dependencies"
+
+# Optionally install full dependencies (uncomment if needed)
+# echo "📦 Installing full dependencies (this may take longer)..."
+# pip install -r requirements.txt
+# echo "✅ Installed all Python dependencies"
 
 # Run database migrations (if applicable)
 # alembic upgrade head

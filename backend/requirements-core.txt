@@ -6,18 +6,36 @@ fastapi==0.104.1
 uvicorn[standard]==0.24.0
 pydantic==2.5.0
 pydantic-settings==2.1.0
+email-validator==2.2.0  # Required for Pydantic EmailStr
+
+# Database
+sqlalchemy==2.0.42
+alembic==1.16.4
+psycopg2-binary==2.9.10  # PostgreSQL driver
 
 # Authentication & Security
-python-jose[cryptography]==3.3.0
+python-jose[cryptography]==3.5.0
 passlib[bcrypt]==1.7.4
-python-multipart==0.0.6
+python-multipart==0.0.20
+
+# Caching
+redis==6.2.0
+
+# Machine Learning
+scikit-learn==1.7.1
+pandas==2.3.1
+numpy==2.3.2
+matplotlib==3.10.5
+seaborn==0.13.2
+joblib==1.5.1
 
 # Environment and Configuration
 python-dotenv==1.0.0
 
 # Development and Testing
-pytest==7.4.3
-httpx==0.25.2  # For testing FastAPI
+pytest==8.4.1
+pytest-asyncio==1.1.0
+httpx==0.28.1  # For testing FastAPI
 
 # Code Quality
 black==23.12.0

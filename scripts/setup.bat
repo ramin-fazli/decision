@@ -66,8 +66,16 @@ if not exist venv (
 REM Activate virtual environment and install dependencies
 call venv\Scripts\activate.bat
 python -m pip install --upgrade pip
-pip install -r requirements.txt
-echo ✅ Installed Python dependencies
+
+REM Install core dependencies first for faster setup
+echo 📦 Installing core dependencies...
+pip install -r requirements-core.txt
+echo ✅ Installed core Python dependencies
+
+REM Optionally install full dependencies (uncomment if needed)
+REM echo 📦 Installing full dependencies (this may take longer)...
+REM pip install -r requirements.txt
+REM echo ✅ Installed all Python dependencies
 
 cd ..
 
