@@ -1,0 +1,23 @@
+#!/bin/bash
+
+# Universal setup launcher for Decision Platform
+# This script detects the environment and runs the appropriate setup script
+
+echo "🚀 Decision Platform Setup Launcher"
+echo "======================================"
+
+# Detect the operating system and shell
+if [[ "$OSTYPE" == "msys" || "$OSTYPE" == "win32" ]]; then
+    echo "🔍 Detected: Windows with Git Bash/MSYS"
+    echo "📋 Running Windows-compatible bash setup..."
+    exec ./scripts/setup.sh
+elif [[ "$OS" == "Windows_NT" ]]; then
+    echo "🔍 Detected: Windows"
+    echo "📋 For best experience, run: scripts\\setup.bat"
+    echo "📋 Or continuing with bash script..."
+    exec ./scripts/setup.sh
+else
+    echo "🔍 Detected: Unix-like system ($OSTYPE)"
+    echo "📋 Running bash setup script..."
+    exec ./scripts/setup.sh
+fi

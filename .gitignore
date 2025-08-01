@@ -1,0 +1,425 @@
+# Decision Platform .gitignore
+
+# =============================================================================
+# ENVIRONMENT AND SECRETS
+# =============================================================================
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+*.env
+.envrc
+
+# Secrets and credentials
+secrets/
+credentials/
+*.pem
+*.key
+*.p12
+*.pfx
+service-account.json
+gcp-credentials.json
+
+# =============================================================================
+# PYTHON
+# =============================================================================
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# PyInstaller
+*.manifest
+*.spec
+
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.pytest_cache/
+
+# Virtual environments
+venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+.venv/
+
+# Spyder project settings
+.spyderproject
+.spyproject
+
+# Rope project settings
+.ropeproject
+
+# mkdocs documentation
+/site
+
+# mypy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Pyre type checker
+.pyre/
+
+# =============================================================================
+# NODE.JS / FRONTEND
+# =============================================================================
+# Dependencies
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Runtime data
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# Coverage directory used by tools like istanbul
+coverage/
+*.lcov
+
+# nyc test coverage
+.nyc_output
+
+# Grunt intermediate storage
+.grunt
+
+# Bower dependency directory
+bower_components
+
+# node-waf configuration
+.lock-wscript
+
+# Compiled binary addons
+build/Release
+
+# Dependency directories
+jspm_packages/
+
+# TypeScript cache
+*.tsbuildinfo
+
+# Optional npm cache directory
+.npm
+
+# Optional eslint cache
+.eslintcache
+
+# Optional stylelint cache
+.stylelintcache
+
+# Microbundle cache
+.rpt2_cache/
+.rts2_cache_cjs/
+.rts2_cache_es/
+.rts2_cache_umd/
+
+# Optional REPL history
+.node_repl_history
+
+# Output of 'npm pack'
+*.tgz
+
+# Yarn Integrity file
+.yarn-integrity
+
+# dotenv environment variables file
+.env.test
+
+# parcel-bundler cache
+.cache
+.parcel-cache
+
+# Next.js build output
+.next/
+out/
+
+# Nuxt.js build / generate output
+.nuxt
+dist
+
+# Gatsby files
+.cache/
+public
+
+# Storybook build outputs
+.out
+.storybook-out
+
+# Temporary folders
+tmp/
+temp/
+
+# =============================================================================
+# ML/AI SPECIFIC
+# =============================================================================
+# Model files
+*.pkl
+*.pickle
+*.joblib
+*.h5
+*.pb
+*.onnx
+*.pt
+*.pth
+models/
+saved_models/
+checkpoints/
+
+# Dataset files
+data/raw/
+data/processed/
+data/interim/
+data/external/
+datasets/
+*.csv
+*.xlsx
+*.xls
+*.parquet
+*.feather
+*.hdf5
+
+# Jupyter Notebooks
+.ipynb_checkpoints/
+*.ipynb
+
+# MLflow
+mlruns/
+mlartifacts/
+
+# Weights & Biases
+wandb/
+
+# TensorBoard logs
+logs/
+tensorboard_logs/
+
+# =============================================================================
+# DOCKER
+# =============================================================================
+# Docker volumes
+docker/volumes/
+.docker/
+
+# =============================================================================
+# DATABASES
+# =============================================================================
+# SQLite
+*.db
+*.sqlite
+*.sqlite3
+
+# PostgreSQL
+*.dump
+*.sql
+
+# =============================================================================
+# IDE / EDITORS
+# =============================================================================
+# Visual Studio Code
+.vscode/
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+*.code-workspace
+
+# JetBrains IDEs
+.idea/
+*.swp
+*.swo
+*~
+
+# Vim
+*.swp
+*.swo
+*.tmp
+
+# Emacs
+*~
+\#*\#
+/.emacs.desktop
+/.emacs.desktop.lock
+*.elc
+auto-save-list
+tramp
+.\#*
+
+# Sublime Text
+*.sublime-project
+*.sublime-workspace
+
+# =============================================================================
+# OPERATING SYSTEM
+# =============================================================================
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon
+._*
+.DocumentRevisions-V100
+.fseventsd
+.Spotlight-V100
+.TemporaryItems
+.Trashes
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+.AppleDB
+.AppleDesktop
+Network Trash Folder
+Temporary Items
+.apdisk
+
+# Windows
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+ehthumbs_vista.db
+*.stackdump
+[Dd]esktop.ini
+$RECYCLE.BIN/
+*.cab
+*.msi
+*.msix
+*.msm
+*.msp
+*.lnk
+
+# Linux
+*~
+.fuse_hidden*
+.directory
+.Trash-*
+.nfs*
+
+# =============================================================================
+# LOGS
+# =============================================================================
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# =============================================================================
+# UPLOADS AND USER DATA
+# =============================================================================
+uploads/
+user_data/
+attachments/
+
+# =============================================================================
+# TERRAFORM
+# =============================================================================
+# Local .terraform directories
+**/.terraform/*
+
+# .tfstate files
+*.tfstate
+*.tfstate.*
+
+# Crash log files
+crash.log
+crash.*.log
+
+# Exclude all .tfvars files, which are likely to contain sentitive data
+*.tfvars
+*.tfvars.json
+
+# Ignore override files as they are usually used to override resources locally
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# Include override files you do want to commit
+!example_override.tf
+
+# Include tfplan files to ignore the plan output of command: terraform plan -out=tfplan
+*tfplan*
+
+# Ignore CLI configuration files
+.terraformrc
+terraform.rc
+
+# =============================================================================
+# KUBERNETES
+# =============================================================================
+# Kubernetes config with sensitive data
+kubeconfig
+*.kubeconfig
+
+# =============================================================================
+# MISCELLANEOUS
+# =============================================================================
+# Backup files
+*.bak
+*.backup
+*.old
+*.orig
+
+# Archive files
+*.zip
+*.tar.gz
+*.rar
+*.7z
+
+# Local development files
+local/
+.local/
+development/
+
+# Documentation builds
+docs/_build/
+site/
+
+# Temporary files
+.tmp/
+.temp/

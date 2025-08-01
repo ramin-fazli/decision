@@ -1,0 +1,191 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: decision-postgres
+    environment:
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
+      POSTGRES_DB: ${DB_NAME:-decision}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/init.sql
+    ports:
+      - "5432:5432"
+    networks:
+      - decision-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres}"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: decision-redis
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+    networks:
+      - decision-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Backend API
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: decision-backend
+    environment:
+      - DATABASE_URL=postgresql://${DB_USER:-postgres}:${DB_PASSWORD:-postgres}@postgres:5432/${DB_NAME:-decision}
+      - REDIS_URL=redis://redis:6379/0
+      - ENVIRONMENT=${ENVIRONMENT:-development}
+      - SECRET_KEY=${SECRET_KEY:-your-secret-key-change-in-production}
+      - DEBUG=${DEBUG:-true}
+    volumes:
+      - ./backend:/app
+      - backend_uploads:/app/uploads
+      - backend_models:/app/models
+    ports:
+      - "8000:8000"
+    networks:
+      - decision-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Celery Worker
+  celery-worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: decision-celery-worker
+    command: celery -A tasks.celery_app worker --loglevel=info
+    environment:
+      - DATABASE_URL=postgresql://${DB_USER:-postgres}:${DB_PASSWORD:-postgres}@postgres:5432/${DB_NAME:-decision}
+      - REDIS_URL=redis://redis:6379/0
+      - ENVIRONMENT=${ENVIRONMENT:-development}
+      - SECRET_KEY=${SECRET_KEY:-your-secret-key-change-in-production}
+    volumes:
+      - ./backend:/app
+      - backend_uploads:/app/uploads
+      - backend_models:/app/models
+    networks:
+      - decision-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # Celery Beat (Scheduler)
+  celery-beat:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: decision-celery-beat
+    command: celery -A tasks.celery_app beat --loglevel=info
+    environment:
+      - DATABASE_URL=postgresql://${DB_USER:-postgres}:${DB_PASSWORD:-postgres}@postgres:5432/${DB_NAME:-decision}
+      - REDIS_URL=redis://redis:6379/0
+      - ENVIRONMENT=${ENVIRONMENT:-development}
+      - SECRET_KEY=${SECRET_KEY:-your-secret-key-change-in-production}
+    volumes:
+      - ./backend:/app
+      - backend_uploads:/app/uploads
+      - backend_models:/app/models
+    networks:
+      - decision-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # Frontend
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: decision-frontend
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:8000
+      - NODE_ENV=${NODE_ENV:-development}
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+      - /app/.next
+    ports:
+      - "3000:3000"
+    networks:
+      - decision-network
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+  # MinIO Object Storage (Optional - for file storage)
+  minio:
+    image: minio/minio:latest
+    container_name: decision-minio
+    command: server /data --console-address ":9001"
+    environment:
+      - MINIO_ROOT_USER=${MINIO_ACCESS_KEY:-minioadmin}
+      - MINIO_ROOT_PASSWORD=${MINIO_SECRET_KEY:-minioadmin}
+    volumes:
+      - minio_data:/data
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    networks:
+      - decision-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+
+  # Nginx (Reverse Proxy)
+  nginx:
+    image: nginx:alpine
+    container_name: decision-nginx
+    volumes:
+      - ./docker/nginx.conf:/etc/nginx/nginx.conf:ro
+    ports:
+      - "80:80"
+      - "443:443"
+    networks:
+      - decision-network
+    depends_on:
+      - frontend
+      - backend
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  redis_data:
+  backend_uploads:
+  backend_models:
+  minio_data:
+
+networks:
+  decision-network:
+    driver: bridge
