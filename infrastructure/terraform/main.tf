@@ -111,8 +111,8 @@ variable "domain_name" {
 
 # Data sources
 data "aws_availability_zones" "available" {
-  count = var.cloud_provider == "aws" ? 1 : 0
-  state = "available"
+  provider = aws.main
+  state    = "available"
 }
 
 # Local values
@@ -128,7 +128,7 @@ locals {
 
 # AWS Provider Configuration
 provider "aws" {
-  count  = var.cloud_provider == "aws" ? 1 : 0
+  alias  = "main"
   region = var.region
   
   default_tags {
@@ -138,14 +138,14 @@ provider "aws" {
 
 # GCP Provider Configuration
 provider "google" {
-  count   = var.cloud_provider == "gcp" ? 1 : 0
+  alias   = "main"
   region  = var.region
   project = var.project_name
 }
 
 # Azure Provider Configuration
 provider "azurerm" {
-  count = var.cloud_provider == "azure" ? 1 : 0
+  alias = "main"
   features {}
 }
 
@@ -159,6 +159,12 @@ module "networking" {
   region         = var.region
   
   tags = local.common_tags
+  
+  providers = {
+    aws    = aws.main
+    google = google.main
+    azurerm = azurerm.main
+  }
 }
 
 # Kubernetes Cluster Module
@@ -179,6 +185,12 @@ module "kubernetes" {
   
   tags = local.common_tags
   
+  providers = {
+    aws    = aws.main
+    google = google.main
+    azurerm = azurerm.main
+  }
+  
   depends_on = [module.networking]
 }
 
@@ -196,6 +208,12 @@ module "database" {
   
   tags = local.common_tags
   
+  providers = {
+    aws    = aws.main
+    google = google.main
+    azurerm = azurerm.main
+  }
+  
   depends_on = [module.networking]
 }
 
@@ -209,6 +227,12 @@ module "storage" {
   region         = var.region
   
   tags = local.common_tags
+  
+  providers = {
+    aws    = aws.main
+    google = google.main
+    azurerm = azurerm.main
+  }
 }
 
 # Configure Kubernetes provider
