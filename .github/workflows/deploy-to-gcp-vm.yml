@@ -175,6 +175,7 @@ jobs:
           VCS_REF=${{ github.sha }}
           BUILD_VERSION=${{ github.ref_name }}
           NEXT_PUBLIC_API_URL=http://localhost:8000
+          NODE_ENV=production
         cache-from: type=gha
         cache-to: type=gha,mode=max
 
