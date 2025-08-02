@@ -232,10 +232,85 @@ jobs:
       uses: actions/checkout@v4
       with:
         sparse-checkout: |
-          scripts/
-          docker-compose.yml
-          docker/
           .env.example
+        sparse-checkout-cone-mode: false
+
+    - name: Create nginx configuration
+      run: |
+        mkdir -p docker
+        cat > docker/nginx.conf << 'EOF'
+        events {
+            worker_connections 1024;
+        }
+
+        http {
+            upstream frontend {
+                server frontend:3000;
+            }
+
+            upstream backend {
+                server backend:8000;
+            }
+
+            server {
+                listen 80;
+                server_name _;
+
+                # Frontend routes
+                location / {
+                    proxy_pass http://frontend;
+                    proxy_set_header Host $host;
+                    proxy_set_header X-Real-IP $remote_addr;
+                    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+                    proxy_set_header X-Forwarded-Proto $scheme;
+                }
+
+                # Backend API routes
+                location /api/ {
+                    proxy_pass http://backend/;
+                    proxy_set_header Host $host;
+                    proxy_set_header X-Real-IP $remote_addr;
+                    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+                    proxy_set_header X-Forwarded-Proto $scheme;
+                }
+
+                # Backend docs
+                location /docs {
+                    proxy_pass http://backend/docs;
+                    proxy_set_header Host $host;
+                    proxy_set_header X-Real-IP $remote_addr;
+                    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+                    proxy_set_header X-Forwarded-Proto $scheme;
+                }
+            }
+        }
+        EOF
+
+    - name: Create database initialization script
+      run: |
+        mkdir -p scripts
+        cat > scripts/init-db.sql << 'EOF'
+        -- Initialize Decision Platform Database
+        CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+        CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+
+        -- Create tables if they don't exist
+        -- Users table
+        CREATE TABLE IF NOT EXISTS users (
+            id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+            email VARCHAR(255) UNIQUE NOT NULL,
+            hashed_password VARCHAR(255) NOT NULL,
+            is_active BOOLEAN DEFAULT TRUE,
+            is_superuser BOOLEAN DEFAULT FALSE,
+            created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+        );
+
+        -- Sample data for development
+        INSERT INTO users (email, hashed_password, is_superuser) 
+        VALUES ('admin@decision.ai', '$2b$12$example_hash', TRUE)
+        ON CONFLICT (email) DO NOTHING;
+        EOF
 
     - name: Authenticate to Google Cloud
       uses: google-github-actions/auth@v2
@@ -814,6 +889,7 @@ jobs:
           --scp-flag="-o ConnectTimeout=10"
         
         # Copy nginx config and init scripts
+        echo "� Copying docker and scripts directories..."
         gcloud compute scp --recurse docker/ ${{ env.VM_NAME }}:~/docker/ \
           --zone=${{ env.VM_ZONE }} \
           --project=${{ secrets.GCP_PROJECT_ID }} \
