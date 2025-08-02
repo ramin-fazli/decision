@@ -512,6 +512,41 @@ jobs:
         fi
         echo "✅ Docker authentication completed"
         
+        # Install Docker Compose if not present
+        echo "🔧 Ensuring Docker Compose is installed..."
+        if ! command -v docker-compose &> /dev/null && ! docker compose version &> /dev/null; then
+            echo "📦 Installing Docker Compose..."
+            
+            # Try to install Docker Compose V2 (preferred)
+            if command -v docker &> /dev/null; then
+                # Check if docker compose plugin is available
+                if ! docker compose version &> /dev/null; then
+                    echo "Installing Docker Compose plugin..."
+                    # Download and install Docker Compose
+                    DOCKER_COMPOSE_VERSION=\$(curl -s https://api.github.com/repos/docker/compose/releases/latest | grep 'tag_name' | cut -d\" -f4)
+                    sudo curl -L "https://github.com/docker/compose/releases/download/\${DOCKER_COMPOSE_VERSION}/docker-compose-\$(uname -s)-\$(uname -m)" -o /usr/local/bin/docker-compose
+                    sudo chmod +x /usr/local/bin/docker-compose
+                    
+                    # Create symlink for compatibility
+                    sudo ln -sf /usr/local/bin/docker-compose /usr/bin/docker-compose
+                fi
+            fi
+        else
+            echo "✅ Docker Compose is already installed"
+        fi
+        
+        # Verify Docker Compose installation
+        if command -v docker-compose &> /dev/null; then
+            echo "✅ Docker Compose (standalone) version: \$(docker-compose --version)"
+            COMPOSE_CMD="docker-compose"
+        elif docker compose version &> /dev/null; then
+            echo "✅ Docker Compose (plugin) version: \$(docker compose version)"
+            COMPOSE_CMD="docker compose"
+        else
+            echo "❌ Failed to install Docker Compose"
+            exit 1
+        fi
+        
         # Pull latest images (with fallback to sudo and retry logic)
         echo "📥 Pulling latest Docker images..."
         
@@ -590,9 +625,9 @@ jobs:
         # Stop existing containers if running (with fallback to sudo)
         echo "🛑 Stopping existing services..."
         if docker info >/dev/null 2>&1; then
-            docker-compose -f /opt/decision-platform/docker-compose.yml down 2>/dev/null || true
+            $COMPOSE_CMD -f /opt/decision-platform/docker-compose.prod.yml down 2>/dev/null || true
         else
-            sudo docker-compose -f /opt/decision-platform/docker-compose.yml down 2>/dev/null || true
+            sudo $COMPOSE_CMD -f /opt/decision-platform/docker-compose.prod.yml down 2>/dev/null || true
         fi
         
         # Clean up old images (keep last 3) 
@@ -920,6 +955,18 @@ jobs:
             USE_SUDO="sudo"
         fi
         
+        # Determine the correct Docker Compose command
+        if command -v docker-compose &> /dev/null; then
+            COMPOSE_CMD="docker-compose"
+        elif docker compose version &> /dev/null; then
+            COMPOSE_CMD="docker compose"
+        else
+            echo "❌ Docker Compose not found. Please install Docker Compose."
+            exit 1
+        fi
+        
+        echo "🐳 Using Docker Compose command: $COMPOSE_CMD"
+        
         # Ensure environment file exists
         if [ ! -f "/opt/decision-platform/.env" ]; then
             echo "❌ Environment file not found at /opt/decision-platform/.env"
@@ -943,26 +990,26 @@ jobs:
         # First, clean up any existing containers
         echo "🧹 Cleaning up existing containers..."
         if [ -n "$USE_SUDO" ]; then
-            sudo docker-compose -f docker-compose.prod.yml down --remove-orphans 2>/dev/null || true
+            sudo $COMPOSE_CMD -f docker-compose.prod.yml down --remove-orphans 2>/dev/null || true
         else
-            docker-compose -f docker-compose.prod.yml down --remove-orphans 2>/dev/null || true
+            $COMPOSE_CMD -f docker-compose.prod.yml down --remove-orphans 2>/dev/null || true
         fi
         
         # Start services with timeout
         echo "🐳 Starting containers..."
         if [ -n "$USE_SUDO" ]; then
-            timeout 300 sudo docker-compose -f docker-compose.prod.yml --env-file .env up -d
+            timeout 300 sudo $COMPOSE_CMD -f docker-compose.prod.yml --env-file .env up -d
         else
-            timeout 300 docker-compose -f docker-compose.prod.yml --env-file .env up -d
+            timeout 300 $COMPOSE_CMD -f docker-compose.prod.yml --env-file .env up -d
         fi
         
         if [ $? -ne 0 ]; then
             echo "❌ Failed to start containers"
             echo "📋 Container logs:"
             if [ -n "$USE_SUDO" ]; then
-                sudo docker-compose -f docker-compose.prod.yml logs --tail 20
+                sudo $COMPOSE_CMD -f docker-compose.prod.yml logs --tail 20
             else
-                docker-compose -f docker-compose.prod.yml logs --tail 20
+                $COMPOSE_CMD -f docker-compose.prod.yml logs --tail 20
             fi
             exit 1
         fi
@@ -976,15 +1023,15 @@ jobs:
         
         # Verify deployment
         echo "🔍 Verifying deployment..."
-        if $USE_SUDO docker-compose -f docker-compose.prod.yml ps | grep -q "Up"; then
+        if $USE_SUDO $COMPOSE_CMD -f docker-compose.prod.yml ps | grep -q "Up"; then
           echo "✅ Services are running successfully!"
           
           # Display service status
           echo "📊 Service Status:"
-          $USE_SUDO docker-compose -f docker-compose.prod.yml ps
+          $USE_SUDO $COMPOSE_CMD -f docker-compose.prod.yml ps
         else
           echo "❌ Some services failed to start!"
-          $USE_SUDO docker-compose -f docker-compose.prod.yml logs --tail 10
+          $USE_SUDO $COMPOSE_CMD -f docker-compose.prod.yml logs --tail 10
           exit 1
         fi
         
@@ -999,7 +1046,7 @@ jobs:
           fi
           if [ $i -eq 6 ]; then
             echo "⚠️ Backend health check failed"
-            $USE_SUDO docker-compose -f docker-compose.prod.yml logs backend --tail 10
+            $USE_SUDO $COMPOSE_CMD -f docker-compose.prod.yml logs backend --tail 10
           fi
           echo "⏳ Waiting for backend to be ready... ($i/6)"
           sleep 10
@@ -1013,7 +1060,7 @@ jobs:
           fi
           if [ $i -eq 6 ]; then
             echo "⚠️ Frontend health check failed"
-            $USE_SUDO docker-compose -f docker-compose.prod.yml logs frontend --tail 10
+            $USE_SUDO $COMPOSE_CMD -f docker-compose.prod.yml logs frontend --tail 10
           fi
           echo "⏳ Waiting for frontend to be ready... ($i/6)"
           sleep 10
