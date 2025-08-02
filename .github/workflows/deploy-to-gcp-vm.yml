@@ -402,6 +402,33 @@ jobs:
         
         echo "✅ VM is ready for deployment"
 
+    - name: Pre-authenticate VM Docker
+      run: |
+        echo "🔐 Pre-authenticating Docker on VM..."
+        timeout 120 gcloud compute ssh ${{ env.VM_NAME }} \
+          --zone=${{ env.VM_ZONE }} \
+          --project=${{ secrets.GCP_PROJECT_ID }} \
+          --ssh-flag="-o ConnectTimeout=30 -o ServerAliveInterval=30 -o ServerAliveCountMax=3" \
+          --command="
+            # Install or update gcloud if needed
+            if ! command -v gcloud &> /dev/null; then
+              echo 'Installing Google Cloud SDK...'
+              curl -sSL https://sdk.cloud.google.com | bash
+              source ~/.bashrc
+            fi
+            
+            # Configure Docker authentication
+            echo 'Configuring Docker authentication...'
+            if docker info >/dev/null 2>&1; then
+              gcloud auth configure-docker ${{ env.GAR_LOCATION }}-docker.pkg.dev --quiet
+            else
+              echo 'Using sudo for Docker authentication...'
+              sudo -u root bash -c 'gcloud auth configure-docker ${{ env.GAR_LOCATION }}-docker.pkg.dev --quiet'
+            fi
+            
+            echo '✅ Docker authentication completed'
+          "
+
     - name: Create deployment script
       run: |
         cat > deploy.sh << 'EOF'
@@ -426,21 +453,64 @@ jobs:
         # Authenticate Docker with GCP (use sudo if needed)
         echo "🔐 Authenticating Docker with GCP..."
         if docker info >/dev/null 2>&1; then
+            echo "✅ Docker daemon accessible without sudo"
             gcloud auth configure-docker ${{ env.GAR_LOCATION }}-docker.pkg.dev --quiet
         else
-            echo "Using sudo for Docker commands due to permission issues..."
+            echo "⚠️ Using sudo for Docker commands due to permission issues..."
             sudo -u root bash -c "gcloud auth configure-docker ${{ env.GAR_LOCATION }}-docker.pkg.dev --quiet"
         fi
+        echo "✅ Docker authentication completed"
         
-        # Pull latest images (with fallback to sudo)
+        # Pull latest images (with fallback to sudo and retry logic)
         echo "📥 Pulling latest Docker images..."
-        if docker info >/dev/null 2>&1; then
-            docker pull "$BACKEND_IMAGE"
-            docker pull "$FRONTEND_IMAGE"
-        else
-            sudo docker pull "$BACKEND_IMAGE"
-            sudo docker pull "$FRONTEND_IMAGE"
+        
+        # Function to pull image with retry and progress
+        pull_image_with_retry() {
+            local image=$1
+            local max_retries=3
+            local retry_count=0
+            
+            while [ $retry_count -lt $max_retries ]; do
+                echo "🔄 Attempting to pull $image (attempt $((retry_count + 1))/$max_retries)..."
+                
+                if docker info >/dev/null 2>&1; then
+                    if timeout 600 docker pull "$image" --quiet; then
+                        echo "✅ Successfully pulled $image"
+                        return 0
+                    fi
+                else
+                    if timeout 600 sudo docker pull "$image" --quiet; then
+                        echo "✅ Successfully pulled $image"
+                        return 0
+                    fi
+                fi
+                
+                retry_count=$((retry_count + 1))
+                if [ $retry_count -lt $max_retries ]; then
+                    echo "⚠️ Pull failed, retrying in 10 seconds..."
+                    sleep 10
+                fi
+            done
+            
+            echo "❌ Failed to pull $image after $max_retries attempts"
+            return 1
+        }
+        
+        # Pull backend image
+        pull_image_with_retry "$BACKEND_IMAGE"
+        BACKEND_STATUS=$?
+        
+        # Pull frontend image
+        pull_image_with_retry "$FRONTEND_IMAGE"
+        FRONTEND_STATUS=$?
+        
+        # Check if both pulls succeeded
+        if [ $BACKEND_STATUS -ne 0 ] || [ $FRONTEND_STATUS -ne 0 ]; then
+            echo "❌ Failed to pull one or more images. Deployment cannot continue."
+            exit 1
         fi
+        
+        echo "✅ All Docker images pulled successfully"
         
         # Stop existing containers if running (with fallback to sudo)
         echo "🛑 Stopping existing services..."
@@ -792,17 +862,42 @@ jobs:
         sudo chmod -R 755 /opt/decision-platform/models
         sudo chmod -R 755 /opt/decision-platform/data
         
-        # Start services with docker-compose
+        # Start services with docker-compose with better error handling
         echo "🚀 Starting Decision Platform services..."
+        
+        # First, clean up any existing containers
+        echo "🧹 Cleaning up existing containers..."
         if [ -n "$USE_SUDO" ]; then
-            sudo docker-compose -f docker-compose.prod.yml --env-file .env up -d
+            sudo docker-compose -f docker-compose.prod.yml down --remove-orphans 2>/dev/null || true
         else
-            docker-compose -f docker-compose.prod.yml --env-file .env up -d
+            docker-compose -f docker-compose.prod.yml down --remove-orphans 2>/dev/null || true
         fi
         
-        # Wait for services to be ready
+        # Start services with timeout
+        echo "🐳 Starting containers..."
+        if [ -n "$USE_SUDO" ]; then
+            timeout 300 sudo docker-compose -f docker-compose.prod.yml --env-file .env up -d
+        else
+            timeout 300 docker-compose -f docker-compose.prod.yml --env-file .env up -d
+        fi
+        
+        if [ $? -ne 0 ]; then
+            echo "❌ Failed to start containers"
+            echo "📋 Container logs:"
+            if [ -n "$USE_SUDO" ]; then
+                sudo docker-compose -f docker-compose.prod.yml logs --tail 20
+            else
+                docker-compose -f docker-compose.prod.yml logs --tail 20
+            fi
+            exit 1
+        fi
+        
+        # Wait for services to be ready with progress indication
         echo "⏳ Waiting for services to be ready..."
-        sleep 30
+        for i in {1..6}; do
+            echo "⏳ Checking service status... ($i/6)"
+            sleep 10
+        done
         
         # Verify deployment
         echo "🔍 Verifying deployment..."
@@ -855,69 +950,167 @@ jobs:
         chmod +x start-containers.sh
 
     - name: Deploy to VM via SSH
-      timeout-minutes: 20
+      timeout-minutes: 30
       run: |
-        # Add VM to known hosts with timeout
-        timeout 30 gcloud compute ssh ${{ env.VM_NAME }} \
-          --zone=${{ env.VM_ZONE }} \
-          --project=${{ secrets.GCP_PROJECT_ID }} \
-          --command="echo 'SSH connection test successful'" \
-          --ssh-flag="-o StrictHostKeyChecking=no -o ConnectTimeout=10"
+        # Ensure SSH directory exists and set proper permissions
+        mkdir -p ~/.ssh
+        chmod 700 ~/.ssh
         
-        # Copy deployment script to VM
-        gcloud compute scp deploy.sh ${{ env.VM_NAME }}:~/deploy.sh \
-          --zone=${{ env.VM_ZONE }} \
-          --project=${{ secrets.GCP_PROJECT_ID }} \
-          --scp-flag="-o ConnectTimeout=10"
+        # Add VM to known hosts with timeout and better error handling
+        echo "🔑 Setting up SSH connection to VM..."
+        for i in {1..3}; do
+          if timeout 60 gcloud compute ssh ${{ env.VM_NAME }} \
+            --zone=${{ env.VM_ZONE }} \
+            --project=${{ secrets.GCP_PROJECT_ID }} \
+            --command="echo 'SSH connection test successful - attempt $i'" \
+            --ssh-flag="-o StrictHostKeyChecking=no -o ConnectTimeout=30 -o BatchMode=yes" 2>/dev/null; then
+            echo "✅ SSH connection established successfully"
+            break
+          fi
+          
+          if [ $i -eq 3 ]; then
+            echo "❌ Failed to establish SSH connection after 3 attempts"
+            exit 1
+          fi
+          
+          echo "⚠️ SSH connection attempt $i failed, retrying in 10 seconds..."
+          sleep 10
+        done
         
-        # Copy environment file to VM
-        gcloud compute scp .env ${{ env.VM_NAME }}:~/decision-platform.env \
-          --zone=${{ env.VM_ZONE }} \
-          --project=${{ secrets.GCP_PROJECT_ID }} \
-          --scp-flag="-o ConnectTimeout=10"
+        # Copy deployment script to VM with retry
+        echo "📤 Copying deployment files to VM..."
+        for i in {1..3}; do
+          if gcloud compute scp deploy.sh ${{ env.VM_NAME }}:~/deploy.sh \
+            --zone=${{ env.VM_ZONE }} \
+            --project=${{ secrets.GCP_PROJECT_ID }} \
+            --scp-flag="-o ConnectTimeout=30"; then
+            echo "✅ Deployment script copied successfully"
+            break
+          fi
+          if [ $i -eq 3 ]; then
+            echo "❌ Failed to copy deployment script after 3 attempts"
+            exit 1
+          fi
+          echo "⚠️ Copy attempt $i failed, retrying..."
+          sleep 5
+        done
         
-        # Copy production docker-compose file to VM
-        gcloud compute scp docker-compose.prod.yml ${{ env.VM_NAME }}:~/docker-compose.prod.yml \
-          --zone=${{ env.VM_ZONE }} \
-          --project=${{ secrets.GCP_PROJECT_ID }} \
-          --scp-flag="-o ConnectTimeout=10"
+        # Copy environment file to VM with retry
+        for i in {1..3}; do
+          if gcloud compute scp .env ${{ env.VM_NAME }}:~/decision-platform.env \
+            --zone=${{ env.VM_ZONE }} \
+            --project=${{ secrets.GCP_PROJECT_ID }} \
+            --scp-flag="-o ConnectTimeout=30"; then
+            echo "✅ Environment file copied successfully"
+            break
+          fi
+          if [ $i -eq 3 ]; then
+            echo "❌ Failed to copy environment file after 3 attempts"
+            exit 1
+          fi
+          echo "⚠️ Copy attempt $i failed, retrying..."
+          sleep 5
+        done
         
-        # Copy container start script to VM
-        gcloud compute scp start-containers.sh ${{ env.VM_NAME }}:~/start-containers.sh \
-          --zone=${{ env.VM_ZONE }} \
-          --project=${{ secrets.GCP_PROJECT_ID }} \
-          --scp-flag="-o ConnectTimeout=10"
+        # Copy production docker-compose file to VM with retry
+        for i in {1..3}; do
+          if gcloud compute scp docker-compose.prod.yml ${{ env.VM_NAME }}:~/docker-compose.prod.yml \
+            --zone=${{ env.VM_ZONE }} \
+            --project=${{ secrets.GCP_PROJECT_ID }} \
+            --scp-flag="-o ConnectTimeout=30"; then
+            echo "✅ Docker compose file copied successfully"
+            break
+          fi
+          if [ $i -eq 3 ]; then
+            echo "❌ Failed to copy docker compose file after 3 attempts"
+            exit 1
+          fi
+          echo "⚠️ Copy attempt $i failed, retrying..."
+          sleep 5
+        done
         
-        # Copy nginx config and init scripts
-        echo "� Copying docker and scripts directories..."
-        gcloud compute scp docker/nginx.conf ${{ env.VM_NAME }}:~/nginx.conf \
-          --zone=${{ env.VM_ZONE }} \
-          --project=${{ secrets.GCP_PROJECT_ID }} \
-          --scp-flag="-o ConnectTimeout=10"
+        # Copy container start script to VM with retry
+        for i in {1..3}; do
+          if gcloud compute scp start-containers.sh ${{ env.VM_NAME }}:~/start-containers.sh \
+            --zone=${{ env.VM_ZONE }} \
+            --project=${{ secrets.GCP_PROJECT_ID }} \
+            --scp-flag="-o ConnectTimeout=30"; then
+            echo "✅ Container start script copied successfully"
+            break
+          fi
+          if [ $i -eq 3 ]; then
+            echo "❌ Failed to copy container start script after 3 attempts"
+            exit 1
+          fi
+          echo "⚠️ Copy attempt $i failed, retrying..."
+          sleep 5
+        done
         
-        gcloud compute scp scripts/init-db.sql ${{ env.VM_NAME }}:~/init-db.sql \
-          --zone=${{ env.VM_ZONE }} \
-          --project=${{ secrets.GCP_PROJECT_ID }} \
-          --scp-flag="-o ConnectTimeout=10"
+        # Copy nginx config and init scripts with retry
+        echo "📁 Copying docker and scripts directories..."
+        for i in {1..3}; do
+          if gcloud compute scp docker/nginx.conf ${{ env.VM_NAME }}:~/nginx.conf \
+            --zone=${{ env.VM_ZONE }} \
+            --project=${{ secrets.GCP_PROJECT_ID }} \
+            --scp-flag="-o ConnectTimeout=30"; then
+            echo "✅ Nginx config copied successfully"
+            break
+          fi
+          if [ $i -eq 3 ]; then
+            echo "❌ Failed to copy nginx config after 3 attempts"
+            exit 1
+          fi
+          echo "⚠️ Copy attempt $i failed, retrying..."
+          sleep 5
+        done
         
-        # Execute deployment on VM with timeout
-        timeout 900 gcloud compute ssh ${{ env.VM_NAME }} \
+        for i in {1..3}; do
+          if gcloud compute scp scripts/init-db.sql ${{ env.VM_NAME }}:~/init-db.sql \
+            --zone=${{ env.VM_ZONE }} \
+            --project=${{ secrets.GCP_PROJECT_ID }} \
+            --scp-flag="-o ConnectTimeout=30"; then
+            echo "✅ Database init script copied successfully"
+            break
+          fi
+          if [ $i -eq 3 ]; then
+            echo "❌ Failed to copy database init script after 3 attempts"
+            exit 1
+          fi
+          echo "⚠️ Copy attempt $i failed, retrying..."
+          sleep 5
+        done
+        
+        # Execute deployment on VM with extended timeout and better SSH settings
+        timeout 1200 gcloud compute ssh ${{ env.VM_NAME }} \
           --zone=${{ env.VM_ZONE }} \
           --project=${{ secrets.GCP_PROJECT_ID }} \
-          --ssh-flag="-o ConnectTimeout=10 -o ServerAliveInterval=30 -o ServerAliveCountMax=3" \
+          --ssh-flag="-o ConnectTimeout=30 -o ServerAliveInterval=60 -o ServerAliveCountMax=10 -o TCPKeepAlive=yes -o StrictHostKeyChecking=no" \
           --command="
-            chmod +x ~/deploy.sh && 
-            ~/deploy.sh && 
-            sudo mv ~/decision-platform.env /opt/decision-platform/.env && 
-            sudo mv ~/docker-compose.prod.yml /opt/decision-platform/ &&
-            sudo mkdir -p /opt/decision-platform/docker &&
-            sudo mkdir -p /opt/decision-platform/scripts &&
-            sudo mv ~/nginx.conf /opt/decision-platform/docker/nginx.conf &&
-            sudo mv ~/init-db.sql /opt/decision-platform/scripts/init-db.sql &&
-            sudo chown -R \$USER:\$USER /opt/decision-platform && 
-            chmod +x ~/start-containers.sh && 
-            cd /opt/decision-platform && 
+            set -e
+            echo '🚀 Starting VM deployment process...'
+            
+            # Make deployment script executable and run it
+            chmod +x ~/deploy.sh
+            echo '📦 Running deployment script...'
+            ~/deploy.sh
+            
+            # Setup application structure
+            echo '📁 Setting up application structure...'
+            sudo mv ~/decision-platform.env /opt/decision-platform/.env
+            sudo mv ~/docker-compose.prod.yml /opt/decision-platform/
+            sudo mkdir -p /opt/decision-platform/docker
+            sudo mkdir -p /opt/decision-platform/scripts
+            sudo mv ~/nginx.conf /opt/decision-platform/docker/nginx.conf
+            sudo mv ~/init-db.sql /opt/decision-platform/scripts/init-db.sql
+            sudo chown -R \$USER:\$USER /opt/decision-platform
+            
+            # Start containers
+            echo '🐳 Starting containers...'
+            chmod +x ~/start-containers.sh
+            cd /opt/decision-platform
             ~/start-containers.sh
+            
+            echo '✅ VM deployment completed successfully!'
           "
 
     - name: Post-deployment verification
