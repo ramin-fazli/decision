@@ -1,29 +1,34 @@
 import Link from 'next/link'
-import { ArrowRight, BarChart3, Brain, Database, Shield, Zap, Globe, Users, TrendingUp, Check, Star, GitBranch, Award, Target, Lightbulb } from 'lucide-react'
+import { ArrowRight, BarChart3, Brain, Database, Shield, Zap, Globe, Users, TrendingUp, Check, Star, GitBranch, Award, Target, Lightbulb, Activity, Cpu, Code, Layers } from 'lucide-react'
 
 export default function HomePage() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-slate-900">
       {/* Header */}
-      <header className="relative">
+      <header className="relative z-50">
         <nav className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <div className="flex h-16 items-center justify-between">
             <div className="flex items-center">
               <Link href="/" className="flex items-center space-x-2">
-                <Brain className="h-8 w-8 text-blue-400" />
+                <div className="relative">
+                  <Brain className="h-8 w-8 text-blue-400" />
+                </div>
                 <span className="text-xl font-bold text-white">Decision</span>
               </Link>
             </div>
             <div className="hidden md:block">
               <div className="ml-10 flex items-baseline space-x-4">
-                <Link href="#features" className="text-gray-300 hover:text-white px-3 py-2 rounded-md text-sm font-medium">
-                  Features
+                <Link href="#technology" className="text-gray-300 hover:text-white px-3 py-2 rounded-md text-sm font-medium transition-colors">
+                  Platform
                 </Link>
-                <Link href="#about" className="text-gray-300 hover:text-white px-3 py-2 rounded-md text-sm font-medium">
-                  About
+                <Link href="#research" className="text-gray-300 hover:text-white px-3 py-2 rounded-md text-sm font-medium transition-colors">
+                  Architecture
                 </Link>
-                <Link href="/dashboard" className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md text-sm font-medium">
-                  Dashboard Preview
+                <Link href="#api" className="text-gray-300 hover:text-white px-3 py-2 rounded-md text-sm font-medium transition-colors">
+                  API
+                </Link>
+                <Link href="/dashboard" className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white px-4 py-2 rounded-md text-sm font-medium transition-all duration-200 shadow-lg">
+                  Live Preview
                 </Link>
               </div>
             </div>
@@ -34,393 +39,430 @@ export default function HomePage() {
       {/* Hero Section */}
       <main>
         <div className="relative px-4 sm:px-6 lg:px-8">
-          <div className="mx-auto max-w-4xl pt-20 pb-24 text-center">
-            <h1 className="text-4xl font-bold tracking-tight text-white sm:text-6xl">
-              Enterprise-Grade
-              <span className="text-blue-400"> Investment Intelligence</span>
+          {/* Background Elements */}
+          <div className="absolute inset-0 overflow-hidden pointer-events-none">
+            <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-blue-500/10 rounded-full blur-3xl"></div>
+            <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-purple-500/10 rounded-full blur-3xl"></div>
+          </div>
+          
+          <div className="relative mx-auto max-w-5xl pt-20 pb-24 text-center">
+            {/* Platform Badge */}
+            <div className="mb-8 inline-flex items-center px-4 py-2 bg-white/10 backdrop-blur-sm rounded-full text-sm text-blue-200">
+              <Target className="h-4 w-4 mr-2" />
+              AI-Powered Decision Intelligence for Investment Professionals
+            </div>
+            
+            <h1 className="text-5xl md:text-7xl font-bold tracking-tight text-white mb-6">
+              <span className="bg-gradient-to-r from-white via-blue-100 to-blue-200 bg-clip-text text-transparent">
+                Investment
+              </span>
+              <br />
+              <span className="text-blue-400">Decision Engine</span>
             </h1>
-            <p className="mt-6 text-lg leading-8 text-gray-300 max-w-2xl mx-auto">
-              Transform your investment decisions with advanced AI-powered analytics. Decision delivers institutional-grade 
-              insights across venture capital, private equity, and public markets with proven accuracy and enterprise security.
+            
+            <p className="mt-6 text-xl leading-8 text-gray-300 max-w-3xl mx-auto">
+              Modular AI platform for predictive analytics across multiple asset classes. 
+              API-first architecture with <span className="text-blue-400 font-semibold">data-source agnostic</span> ingestion, 
+              advanced ML models, and real-time decision intelligence for VC, private equity, and public markets.
             </p>
-            <div className="mt-10 flex items-center justify-center gap-x-6">
+            
+            {/* Technical Highlights */}
+            <div className="mt-8 flex flex-wrap justify-center gap-4 text-sm text-gray-400">
+              <div className="flex items-center bg-white/5 px-3 py-1 rounded-full">
+                <Activity className="h-3 w-3 mr-1 text-green-400" />
+                API-First Architecture
+              </div>
+              <div className="flex items-center bg-white/5 px-3 py-1 rounded-full">
+                <Cpu className="h-3 w-3 mr-1 text-blue-400" />
+                SHAP/LIME Explainability
+              </div>
+              <div className="flex items-center bg-white/5 px-3 py-1 rounded-full">
+                <Code className="h-3 w-3 mr-1 text-purple-400" />
+                Multi-Asset Intelligence
+              </div>
+            </div>
+            
+            <div className="mt-12 flex flex-col sm:flex-row items-center justify-center gap-x-6 gap-y-4">
               <Link
-                href="#contact"
-                className="rounded-md bg-blue-600 px-6 py-3 text-sm font-semibold text-white shadow-sm hover:bg-blue-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 flex items-center"
+                href="/dashboard"
+                className="group relative overflow-hidden rounded-lg bg-gradient-to-r from-blue-600 to-purple-600 px-8 py-4 text-sm font-semibold text-white shadow-lg hover:from-blue-700 hover:to-purple-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 flex items-center transition-all duration-200"
               >
-                Get Started
-                <ArrowRight className="ml-2 h-4 w-4" />
+                <span className="relative z-10 flex items-center">
+                  Explore Platform
+                  <ArrowRight className="ml-2 h-4 w-4 group-hover:translate-x-1 transition-transform" />
+                </span>
+                <div className="absolute inset-0 bg-gradient-to-r from-blue-700 to-purple-700 opacity-0 group-hover:opacity-100 transition-opacity"></div>
               </Link>
               <Link
-                href="#about"
-                className="text-sm font-semibold leading-6 text-white hover:text-blue-400"
+                href="https://calendly.com/raminfazli/freecall"
+                className="text-sm font-semibold leading-6 text-white hover:text-blue-400 flex items-center transition-colors"
               >
-                Learn more <span aria-hidden="true">→</span>
+                Request Enterprise Demo
+                <span aria-hidden="true" className="ml-1 transition-transform hover:translate-x-1">→</span>
               </Link>
             </div>
           </div>
         </div>
 
-        {/* Features Section */}
-        <div id="features" className="py-24 bg-white">
+        {/* Platform Architecture Section */}
+        <div id="research" className="py-24 bg-gradient-to-b from-slate-900 to-gray-900">
           <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-            <div className="mx-auto max-w-2xl text-center">
-              <h2 className="text-3xl font-bold tracking-tight text-gray-900 sm:text-4xl">
-                Enterprise Investment Intelligence Platform
+            <div className="text-center mb-16">
+              <div className="inline-flex items-center px-4 py-2 bg-blue-600/20 rounded-full text-blue-300 text-sm mb-6">
+                <GitBranch className="h-4 w-4 mr-2" />
+                API-First Decision Intelligence Platform
+              </div>
+              <h2 className="text-4xl font-bold text-white mb-6">
+                Modular AI Architecture for Investment Decisions
               </h2>
-              <p className="mt-4 text-lg leading-8 text-gray-600">
-                Production-ready AI solutions designed for institutional investment workflows
-              </p>
-            </div>
-            <div className="mx-auto mt-16 max-w-2xl sm:mt-20 lg:mt-24 lg:max-w-none">
-              <dl className="grid max-w-xl grid-cols-1 gap-x-8 gap-y-16 lg:max-w-none lg:grid-cols-3">
-                <div className="flex flex-col">
-                  <dt className="flex items-center gap-x-3 text-base font-semibold leading-7 text-gray-900">
-                    <Brain className="h-5 w-5 flex-none text-blue-600" />
-                    Advanced ML Engine
-                  </dt>
-                  <dd className="mt-4 flex flex-auto flex-col text-base leading-7 text-gray-600">
-                    <p className="flex-auto">
-                      Four specialized machine learning models (Decision Trees, Random Forests, Neural Networks, QDA) 
-                      engineered for investment prediction with enterprise-grade accuracy and reliability.
-                    </p>
-                  </dd>
-                </div>
-                <div className="flex flex-col">
-                  <dt className="flex items-center gap-x-3 text-base font-semibold leading-7 text-gray-900">
-                    <Database className="h-5 w-5 flex-none text-blue-600" />
-                    Universal Data Integration
-                  </dt>
-                  <dd className="mt-4 flex flex-auto flex-col text-base leading-7 text-gray-600">
-                    <p className="flex-auto">
-                      Seamless integration with any data source: CSV, Excel, REST APIs, SQL/NoSQL databases, 
-                      and real-time market feeds with automated data validation and cleansing.
-                    </p>
-                  </dd>
-                </div>
-                <div className="flex flex-col">
-                  <dt className="flex items-center gap-x-3 text-base font-semibold leading-7 text-gray-900">
-                    <BarChart3 className="h-5 w-5 flex-none text-blue-600" />
-                    Explainable AI
-                  </dt>
-                  <dd className="mt-4 flex flex-auto flex-col text-base leading-7 text-gray-600">
-                    <p className="flex-auto">
-                      SHAP and LIME integration provides transparent model explanations and decision insights, 
-                      meeting regulatory requirements and building stakeholder confidence.
-                    </p>
-                  </dd>
-                </div>
-                <div className="flex flex-col">
-                  <dt className="flex items-center gap-x-3 text-base font-semibold leading-7 text-gray-900">
-                    <Zap className="h-5 w-5 flex-none text-blue-600" />
-                    Enterprise API Suite
-                  </dt>
-                  <dd className="mt-4 flex flex-auto flex-col text-base leading-7 text-gray-600">
-                    <p className="flex-auto">
-                      Comprehensive RESTful API architecture enables seamless integration with existing investment 
-                      management systems, CRMs, and portfolio management platforms.
-                    </p>
-                  </dd>
-                </div>
-                <div className="flex flex-col">
-                  <dt className="flex items-center gap-x-3 text-base font-semibold leading-7 text-gray-900">
-                    <Globe className="h-5 w-5 flex-none text-blue-600" />
-                    Cloud Infrastructure
-                  </dt>
-                  <dd className="mt-4 flex flex-auto flex-col text-base leading-7 text-gray-600">
-                    <p className="flex-auto">
-                      Deploy on AWS, GCP, or Azure with enterprise-grade security, compliance, and scalability. 
-                      Docker and Kubernetes ready with Terraform infrastructure as code.
-                    </p>
-                  </dd>
-                </div>
-                <div className="flex flex-col">
-                  <dt className="flex items-center gap-x-3 text-base font-semibold leading-7 text-gray-900">
-                    <TrendingUp className="h-5 w-5 flex-none text-blue-600" />
-                    Multi-Asset Intelligence
-                  </dt>
-                  <dd className="mt-4 flex flex-auto flex-col text-base leading-7 text-gray-600">
-                    <p className="flex-auto">
-                      Unified platform supporting venture capital, private equity, public equities, fixed income, 
-                      and alternative investments with specialized models for each asset class.
-                    </p>
-                  </dd>
-                </div>
-              </dl>
-            </div>
-          </div>
-        </div>
-
-        {/* Enterprise Solutions Section */}
-        <div id="about" className="py-24 bg-gray-50">
-          <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-            <div className="mx-auto max-w-3xl text-center">
-              <h2 className="text-3xl font-bold tracking-tight text-gray-900 sm:text-4xl">
-                Enterprise Investment Intelligence
-              </h2>
-              <p className="mt-6 text-lg leading-8 text-gray-600">
-                Decision transforms investment workflows through advanced machine learning and quantitative analytics. 
-                Our enterprise-grade platform delivers actionable insights across all investment asset classes, 
-                empowering firms to make data-driven decisions with confidence.
-              </p>
-              <p className="mt-4 text-lg leading-8 text-gray-600">
-                Trusted by investment professionals worldwide, Decision combines cutting-edge AI with institutional-grade 
-                security and scalability to deliver measurable competitive advantages in today's data-driven markets.
+              <p className="text-lg text-gray-300 max-w-3xl mx-auto">
+                Extensible platform supporting multiple asset classes with data-source agnostic ingestion, 
+                advanced ML capabilities, and cloud-native deployment flexibility.
               </p>
             </div>
             
-            <div className="mx-auto mt-16 max-w-5xl">
-              <div className="grid grid-cols-1 gap-8 lg:grid-cols-3">
-                <div className="rounded-lg bg-white p-8 shadow-sm border border-gray-200">
-                  <Users className="h-8 w-8 text-blue-600" />
-                  <h3 className="mt-4 text-lg font-semibold text-gray-900">Venture Capital Excellence</h3>
-                  <p className="mt-2 text-gray-600">
-                    Advanced startup success prediction, portfolio optimization, intelligent deal flow analysis, and sophisticated exit probability modeling powered by machine learning.
-                  </p>
-                  <div className="mt-4 flex items-center text-sm text-blue-600">
-                    <Check className="h-4 w-4 mr-2" />
-                    84.7% prediction accuracy
-                  </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
+              <div className="bg-white/5 backdrop-blur-sm rounded-xl p-6 border border-white/10">
+                <div className="w-12 h-12 bg-blue-600 rounded-lg flex items-center justify-center mb-4">
+                  <Database className="h-6 w-6 text-white" />
                 </div>
-                <div className="rounded-lg bg-white p-8 shadow-sm border border-gray-200">
-                  <Shield className="h-8 w-8 text-blue-600" />
-                  <h3 className="mt-4 text-lg font-semibold text-gray-900">Private Equity Mastery</h3>
-                  <p className="mt-2 text-gray-600">
-                    Comprehensive target company evaluation, sophisticated performance forecasting, enterprise risk assessment, and strategic value creation planning.
-                  </p>
-                  <div className="mt-4 flex items-center text-sm text-blue-600">
-                    <Check className="h-4 w-4 mr-2" />
-                    Enterprise risk modeling
-                  </div>
-                </div>
-                <div className="rounded-lg bg-white p-8 shadow-sm border border-gray-200">
-                  <BarChart3 className="h-8 w-8 text-blue-600" />
-                  <h3 className="mt-4 text-lg font-semibold text-gray-900">Public Markets Intelligence</h3>
-                  <p className="mt-2 text-gray-600">
-                    Intelligent stock selection and ranking, advanced market timing signals, institutional risk management, and optimized portfolio construction strategies.
-                  </p>
-                  <div className="mt-4 flex items-center text-sm text-blue-600">
-                    <Check className="h-4 w-4 mr-2" />
-                    Real-time market analysis
-                  </div>
-                </div>
+                <h3 className="text-lg font-semibold text-white mb-2">Data Agnostic</h3>
+                <p className="text-gray-400 text-sm">CSV, Excel, APIs, SQL/NoSQL databases with automated pipelines using Airflow/Prefect</p>
               </div>
+              
+              <div className="bg-white/5 backdrop-blur-sm rounded-xl p-6 border border-white/10">
+                <div className="w-12 h-12 bg-purple-600 rounded-lg flex items-center justify-center mb-4">
+                  <Cpu className="h-6 w-6 text-white" />
+                </div>
+                <h3 className="text-lg font-semibold text-white mb-2">Modular ML Engine</h3>
+                <p className="text-gray-400 text-sm">Cloud (Vertex AI, SageMaker, Azure ML) and local inference with state-of-the-art models</p>
+              </div>
+              
+              <div className="bg-white/5 backdrop-blur-sm rounded-xl p-6 border border-white/10">
+                <div className="w-12 h-12 bg-green-600 rounded-lg flex items-center justify-center mb-4">
+                  <BarChart3 className="h-6 w-6 text-white" />
+                </div>
+                <h3 className="text-lg font-semibold text-white mb-2">Model Explainability</h3>
+                <p className="text-gray-400 text-sm">SHAP/LIME integration with comprehensive monitoring and performance tracking</p>
+              </div>
+              
+              <div className="bg-white/5 backdrop-blur-sm rounded-xl p-6 border border-white/10">
+                <div className="w-12 h-12 bg-orange-600 rounded-lg flex items-center justify-center mb-4">
+                  <Layers className="h-6 w-6 text-white" />
+                </div>
+                <h3 className="text-lg font-semibold text-white mb-2">Multi-Asset Support</h3>
+                <p className="text-gray-400 text-sm">Extensible across VC, private equity, public markets with specialized feature pipelines</p>
+              </div>
+            </div>
+            
+            <div className="mt-16 text-center">
+              <Link 
+                href="/docs" 
+                className="inline-flex items-center text-blue-400 hover:text-blue-300 transition-colors"
+              >
+                <Code className="h-4 w-4 mr-2" />
+                Explore API Documentation
+                <ArrowRight className="h-4 w-4 ml-2" />
+              </Link>
             </div>
           </div>
         </div>
-
-        {/* Enterprise Trust Section */}
-        <div className="py-24 bg-white">
+        {/* Technology Stack Section */}
+        <div id="technology" className="py-24 bg-white">
           <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-            <div className="mx-auto max-w-2xl text-center">
-              <h2 className="text-3xl font-bold tracking-tight text-gray-900 sm:text-4xl">
-                Trusted by Leading Investment Firms
+            <div className="text-center mb-16">
+              <h2 className="text-4xl font-bold text-gray-900 mb-6">
+                Decision Engine API
               </h2>
-              <p className="mt-4 text-lg leading-8 text-gray-600">
-                Enterprise-grade security, compliance, and support trusted by institutional investors
+              <p className="text-lg text-gray-600 max-w-3xl mx-auto">
+                Cloud-native ML infrastructure with flexible deployment options and enterprise-grade performance
               </p>
             </div>
             
-            <div className="mx-auto mt-16 max-w-5xl">
-              <div className="grid grid-cols-1 gap-8 lg:grid-cols-3">
-                <div className="text-center p-6">
-                  <div className="mx-auto h-12 w-12 rounded-lg bg-green-50 flex items-center justify-center">
-                    <Shield className="h-6 w-6 text-green-600" />
-                  </div>
-                  <h3 className="mt-4 text-lg font-semibold text-gray-900">Enterprise Security</h3>
-                  <p className="mt-2 text-gray-600">
-                    SOC 2 Type II certified, GDPR compliant, end-to-end encryption, 
-                    and enterprise SSO integration with audit trails.
-                  </p>
-                  <div className="mt-4 space-y-2">
-                    <div className="flex items-center justify-center text-sm text-gray-500">
-                      <Check className="h-4 w-4 mr-2 text-green-500" />
-                      ISO 27001 Certified
-                    </div>
-                    <div className="flex items-center justify-center text-sm text-gray-500">
-                      <Check className="h-4 w-4 mr-2 text-green-500" />
-                      GDPR & CCPA Compliant
-                    </div>
-                  </div>
-                </div>
-                
-                <div className="text-center p-6">
-                  <div className="mx-auto h-12 w-12 rounded-lg bg-blue-50 flex items-center justify-center">
-                    <Users className="h-6 w-6 text-blue-600" />
-                  </div>
-                  <h3 className="mt-4 text-lg font-semibold text-gray-900">24/7 Enterprise Support</h3>
-                  <p className="mt-2 text-gray-600">
-                    Dedicated customer success manager, 24/7 technical support, 
-                    SLA guarantees, and priority feature development.
-                  </p>
-                  <div className="mt-4 space-y-2">
-                    <div className="flex items-center justify-center text-sm text-gray-500">
-                      <Check className="h-4 w-4 mr-2 text-green-500" />
-                      1hr Response SLA
-                    </div>
-                    <div className="flex items-center justify-center text-sm text-gray-500">
-                      <Check className="h-4 w-4 mr-2 text-green-500" />
-                      Dedicated CSM
-                    </div>
-                  </div>
-                </div>
-                
-                <div className="text-center p-6">
-                  <div className="mx-auto h-12 w-12 rounded-lg bg-purple-50 flex items-center justify-center">
-                    <Target className="h-6 w-6 text-purple-600" />
-                  </div>
-                  <h3 className="mt-4 text-lg font-semibold text-gray-900">White-Glove Onboarding</h3>
-                  <p className="mt-2 text-gray-600">
-                    Expert implementation team, custom integrations, training programs, 
-                    and ongoing optimization consulting.
-                  </p>
-                  <div className="mt-4 space-y-2">
-                    <div className="flex items-center justify-center text-sm text-gray-500">
-                      <Check className="h-4 w-4 mr-2 text-green-500" />
-                      30-Day Implementation
-                    </div>
-                    <div className="flex items-center justify-center text-sm text-gray-500">
-                      <Check className="h-4 w-4 mr-2 text-green-500" />
-                      Custom Training
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Integration Partners */}
-            <div className="mx-auto mt-20 max-w-4xl text-center">
-              <p className="text-sm font-semibold text-gray-500 uppercase tracking-wide">
-                Seamless Integration With
-              </p>
-              <div className="mt-8 grid grid-cols-2 gap-8 md:grid-cols-4">
-                <div className="col-span-1 flex justify-center items-center">
-                  <div className="h-8 w-20 bg-gray-200 rounded flex items-center justify-center">
-                    <span className="text-xs font-medium text-gray-600">Salesforce</span>
-                  </div>
-                </div>
-                <div className="col-span-1 flex justify-center items-center">
-                  <div className="h-8 w-20 bg-gray-200 rounded flex items-center justify-center">
-                    <span className="text-xs font-medium text-gray-600">HubSpot</span>
-                  </div>
-                </div>
-                <div className="col-span-1 flex justify-center items-center">
-                  <div className="h-8 w-20 bg-gray-200 rounded flex items-center justify-center">
-                    <span className="text-xs font-medium text-gray-600">Tableau</span>
-                  </div>
-                </div>
-                <div className="col-span-1 flex justify-center items-center">
-                  <div className="h-8 w-20 bg-gray-200 rounded flex items-center justify-center">
-                    <span className="text-xs font-medium text-gray-600">PowerBI</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* CTA Section */}
-        <div className="bg-blue-600">
-          <div className="px-4 py-16 sm:px-6 sm:py-24 lg:px-8">
-            <div className="mx-auto max-w-2xl text-center">
-              <h2 className="text-3xl font-bold tracking-tight text-white sm:text-4xl">
-                Ready to Transform Your Investment Strategy?
-              </h2>
-              <p className="mx-auto mt-6 max-w-xl text-lg leading-8 text-blue-100">
-                Join leading investment firms leveraging AI-powered decision intelligence. 
-                Experience enterprise-grade investment analytics with measurable results.
-              </p>
-              <div className="mt-10 flex items-center justify-center gap-x-6">
-                <Link
-                  href="/dashboard"
-                  className="rounded-md bg-white px-6 py-3 text-sm font-semibold text-blue-600 shadow-sm hover:bg-blue-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
-                >
-                  Preview
-                </Link>
-                <Link
-                  href="#contact"
-                  className="text-sm font-semibold leading-6 text-white hover:text-blue-100"
-                >
-                  Schedule Demo <span aria-hidden="true">→</span>
-                </Link>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Tech Stack Section */}
-        <div className="py-24 bg-white">
-          <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-            <div className="mx-auto max-w-2xl text-center">
-              <h2 className="text-3xl font-bold tracking-tight text-gray-900 sm:text-4xl">
-                Enterprise Technology Stack
-              </h2>
-              <p className="mt-4 text-lg leading-8 text-gray-600">
-                Built on battle-tested technologies for maximum reliability and performance
-              </p>
-            </div>
-            <div className="mx-auto mt-16 max-w-5xl">
-              <div className="grid grid-cols-2 gap-8 md:grid-cols-4">
-                <div className="text-center">
-                  <div className="mx-auto h-12 w-12 rounded-lg bg-blue-50 flex items-center justify-center">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
+              <div className="space-y-8">
+                <div className="flex items-start space-x-4">
+                  <div className="flex-shrink-0 w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
                     <Brain className="h-6 w-6 text-blue-600" />
                   </div>
-                  <h3 className="mt-4 text-lg font-semibold text-gray-900">FastAPI</h3>
-                  <p className="mt-2 text-sm text-gray-600">High-performance Python API framework</p>
-                </div>
-                <div className="text-center">
-                  <div className="mx-auto h-12 w-12 rounded-lg bg-blue-50 flex items-center justify-center">
-                    <Zap className="h-6 w-6 text-blue-600" />
+                  <div>
+                    <h3 className="text-xl font-semibold text-gray-900 mb-2">Modular ML Engine</h3>
+                    <p className="text-gray-600">
+                      Support for cloud-based inference (Vertex AI, SageMaker, Azure ML) and local deployment. 
+                      Advanced feature pipelines with automated model training and validation workflows.
+                    </p>
                   </div>
-                  <h3 className="mt-4 text-lg font-semibold text-gray-900">Next.js</h3>
-                  <p className="mt-2 text-sm text-gray-600">Enterprise React framework</p>
                 </div>
-                <div className="text-center">
-                  <div className="mx-auto h-12 w-12 rounded-lg bg-blue-50 flex items-center justify-center">
-                    <Database className="h-6 w-6 text-blue-600" />
+                
+                <div className="flex items-start space-x-4">
+                  <div className="flex-shrink-0 w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">
+                    <Zap className="h-6 w-6 text-purple-600" />
                   </div>
-                  <h3 className="mt-4 text-lg font-semibold text-gray-900">PostgreSQL</h3>
-                  <p className="mt-2 text-sm text-gray-600">Enterprise-grade database</p>
+                  <div>
+                    <h3 className="text-xl font-semibold text-gray-900 mb-2">API-First Design</h3>
+                    <p className="text-gray-600">
+                      RESTful architecture with comprehensive OpenAPI documentation. 
+                      Flexible integration with any system, data source, or visualization tool.
+                    </p>
+                  </div>
                 </div>
-                <div className="text-center">
-                  <div className="mx-auto h-12 w-12 rounded-lg bg-blue-50 flex items-center justify-center">
-                    <Globe className="h-6 w-6 text-blue-600" />
+                
+                <div className="flex items-start space-x-4">
+                  <div className="flex-shrink-0 w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
+                    <Shield className="h-6 w-6 text-green-600" />
                   </div>
-                  <h3 className="mt-4 text-lg font-semibold text-gray-900">Kubernetes</h3>
-                  <p className="mt-2 text-sm text-gray-600">Container orchestration</p>
+                  <div>
+                    <h3 className="text-xl font-semibold text-gray-900 mb-2">Enterprise Ready</h3>
+                    <p className="text-gray-600">
+                      Production-grade security, monitoring, and compliance features. 
+                      Docker containerization with Kubernetes orchestration and Terraform IaC.
+                    </p>
+                  </div>
+                </div>
+              </div>
+              
+              <div className="bg-gray-900 rounded-xl p-6 text-green-400 font-mono text-sm overflow-x-auto">
+                <div className="mb-4 text-gray-400"># Decision Engine API</div>
+                <div className="space-y-2">
+                  <div><span className="text-blue-400">POST</span> /api/v1/decisions/predict</div>
+                  <div className="text-gray-400">{`{`}</div>
+                  <div className="ml-4">"asset_class": "venture_capital",</div>
+                  <div className="ml-4">"model_type": "ensemble",</div>
+                  <div className="ml-4">"features": {`{`}</div>
+                  <div className="ml-8">"funding_stage": "Series A",</div>
+                  <div className="ml-8">"market_size": 2000000000,</div>
+                  <div className="ml-8">"team_experience": 8.5</div>
+                  <div className="ml-4">{`}`}</div>
+                  <div className="text-gray-400">{`}`}</div>
+                  <div className="mt-4 text-yellow-400"># Explainable Response</div>
+                  <div className="text-gray-400">{`{`}</div>
+                  <div className="ml-4">"decision_score": 0.847,</div>
+                  <div className="ml-4">"confidence": 0.92,</div>
+                  <div className="ml-4">"shap_explanation": {`{...}`}</div>
+                  <div className="text-gray-400">{`}`}</div>
                 </div>
               </div>
             </div>
           </div>
         </div>
 
-        {/* Stats Section */}
-        <div className="py-24 bg-gray-50">
+        {/* API Documentation Section */}
+        <div id="api" className="py-24 bg-gray-50">
           <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-            <div className="mx-auto max-w-2xl text-center">
-              <h2 className="text-3xl font-bold tracking-tight text-gray-900 sm:text-4xl">
-                Proven Enterprise Results
+            <div className="text-center mb-16">
+              <h2 className="text-4xl font-bold text-gray-900 mb-6">
+                Data Pipeline & Integration
               </h2>
-              <p className="mt-4 text-lg leading-8 text-gray-600">
-                Delivering measurable value to investment professionals worldwide
+              <p className="text-lg text-gray-600 max-w-3xl mx-auto">
+                Data-source agnostic platform with automated pipelines and flexible connectors
               </p>
             </div>
-            <div className="mx-auto mt-16 max-w-5xl">
-              <div className="grid grid-cols-1 gap-8 md:grid-cols-3">
-                <div className="text-center">
-                  <div className="text-4xl font-bold text-blue-600">84.7%</div>
-                  <div className="mt-2 text-lg font-semibold text-gray-900">Prediction Accuracy</div>
-                  <div className="mt-1 text-sm text-gray-600">Validated across 15,000+ investment decisions</div>
+            
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+              <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-200">
+                <Database className="h-8 w-8 text-blue-600 mb-4" />
+                <h3 className="text-lg font-semibold text-gray-900 mb-2">Universal Data Ingestion</h3>
+                <p className="text-gray-600 mb-4">CSV, Excel, REST APIs, SQL/NoSQL databases with automated validation</p>
+                <div className="text-xs bg-gray-100 p-3 rounded font-mono">
+                  POST /api/v1/data/ingest
                 </div>
-                <div className="text-center">
-                  <div className="text-4xl font-bold text-blue-600">&lt;50ms</div>
-                  <div className="mt-2 text-lg font-semibold text-gray-900">API Response Time</div>
-                  <div className="mt-1 text-sm text-gray-600">Real-time predictions at enterprise scale</div>
+              </div>
+              
+              <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-200">
+                <Layers className="h-8 w-8 text-purple-600 mb-4" />
+                <h3 className="text-lg font-semibold text-gray-900 mb-2">Pipeline Orchestration</h3>
+                <p className="text-gray-600 mb-4">Airflow/Prefect connectors for automated feature engineering</p>
+                <div className="text-xs bg-gray-100 p-3 rounded font-mono">
+                  GET /api/v1/pipelines/status
                 </div>
-                <div className="text-center">
-                  <div className="text-4xl font-bold text-blue-600">99.9%</div>
-                  <div className="mt-2 text-lg font-semibold text-gray-900">Platform Uptime</div>
-                  <div className="mt-1 text-sm text-gray-600">Enterprise SLA with 24/7 monitoring</div>
+              </div>
+              
+              <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-200">
+                <Code className="h-8 w-8 text-green-600 mb-4" />
+                <h3 className="text-lg font-semibold text-gray-900 mb-2">Model Management</h3>
+                <p className="text-gray-600 mb-4">Deploy, monitor, and version ML models across environments</p>
+                <div className="text-xs bg-gray-100 p-3 rounded font-mono">
+                  GET /api/v1/models/performance
+                </div>
+              </div>
+            </div>
+            
+            <div className="mt-12 text-center">
+              <Link 
+                href="/docs" 
+                className="inline-flex items-center bg-gradient-to-r from-blue-600 to-purple-600 text-white px-6 py-3 rounded-lg hover:from-blue-700 hover:to-purple-700 transition-all duration-200"
+              >
+                <Code className="h-4 w-4 mr-2" />
+                View API Documentation
+                <ArrowRight className="h-4 w-4 ml-2" />
+              </Link>
+            </div>
+          </div>
+        </div>
+
+        {/* Investment Intelligence Section */}
+        <div className="py-24 bg-white">
+          <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+            <div className="text-center mb-16">
+              <h2 className="text-4xl font-bold text-gray-900 mb-6">
+                Multi-Asset Investment Intelligence
+              </h2>
+              <p className="text-lg text-gray-600 max-w-3xl mx-auto">
+                Specialized ML models trained for different investment asset classes, 
+                delivering actionable insights across your entire portfolio
+              </p>
+            </div>
+            
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+              <div className="group relative bg-gradient-to-br from-blue-50 to-indigo-50 rounded-2xl p-8 border border-blue-100 hover:shadow-xl transition-all duration-300">
+                <div className="absolute top-4 right-4">
+                  <div className="w-3 h-3 bg-green-400 rounded-full animate-pulse"></div>
+                </div>
+                <Users className="h-12 w-12 text-blue-600 mb-6" />
+                <h3 className="text-xl font-semibold text-gray-900 mb-4">Venture Capital Intelligence</h3>
+                <p className="text-gray-600 mb-6">
+                  Predictive analytics for startup success assessment. Analyze funding patterns, team dynamics, 
+                  market opportunities, and exit potential with quantitative scoring models.
+                </p>
+                <div className="space-y-2 text-sm">
+                  <div className="flex items-center text-blue-600">
+                    <Check className="h-4 w-4 mr-2" />
+                    Multi-model ensemble scoring
+                  </div>
+                  <div className="flex items-center text-blue-600">
+                    <Check className="h-4 w-4 mr-2" />
+                    Feature importance analysis
+                  </div>
+                  <div className="flex items-center text-blue-600">
+                    <Check className="h-4 w-4 mr-2" />
+                    Risk-adjusted returns
+                  </div>
+                </div>
+              </div>
+              
+              <div className="group relative bg-gradient-to-br from-purple-50 to-pink-50 rounded-2xl p-8 border border-purple-100 hover:shadow-xl transition-all duration-300">
+                <div className="absolute top-4 right-4">
+                  <div className="w-3 h-3 bg-orange-400 rounded-full"></div>
+                </div>
+                <Shield className="h-12 w-12 text-purple-600 mb-6" />
+                <h3 className="text-xl font-semibold text-gray-900 mb-4">Private Equity Analytics</h3>
+                <p className="text-gray-600 mb-6">
+                  Advanced due diligence automation with risk assessment, performance forecasting, 
+                  and value creation opportunity identification.
+                </p>
+                <div className="space-y-2 text-sm">
+                  <div className="flex items-center text-purple-600">
+                    <Check className="h-4 w-4 mr-2" />
+                    Financial model validation
+                  </div>
+                  <div className="flex items-center text-purple-600">
+                    <Check className="h-4 w-4 mr-2" />
+                    Market position analysis
+                  </div>
+                  <div className="flex items-center text-purple-600">
+                    <Check className="h-4 w-4 mr-2" />
+                    Exit scenario modeling
+                  </div>
+                </div>
+              </div>
+              
+              <div className="group relative bg-gradient-to-br from-green-50 to-emerald-50 rounded-2xl p-8 border border-green-100 hover:shadow-xl transition-all duration-300">
+                <div className="absolute top-4 right-4">
+                  <div className="w-3 h-3 bg-blue-400 rounded-full animate-pulse"></div>
+                </div>
+                <TrendingUp className="h-12 w-12 text-green-600 mb-6" />
+                <h3 className="text-xl font-semibold text-gray-900 mb-4">Public Markets Intelligence</h3>
+                <p className="text-gray-600 mb-6">
+                  Quantitative stock selection, sector rotation signals, and portfolio optimization 
+                  using advanced statistical models and market microstructure analysis.
+                </p>
+                <div className="space-y-2 text-sm">
+                  <div className="flex items-center text-green-600">
+                    <Check className="h-4 w-4 mr-2" />
+                    Real-time market signals
+                  </div>
+                  <div className="flex items-center text-green-600">
+                    <Check className="h-4 w-4 mr-2" />
+                    Risk-adjusted returns
+                  </div>
+                  <div className="flex items-center text-green-600">
+                    <Check className="h-4 w-4 mr-2" />
+                    Portfolio optimization
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Performance & Deployment Section */}
+        <div className="py-24 bg-gray-50">
+          <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+            <div className="text-center mb-16">
+              <h2 className="text-4xl font-bold text-gray-900 mb-6">
+                Enterprise-Grade Performance
+              </h2>
+              <p className="text-lg text-gray-600 max-w-3xl mx-auto">
+                Scalable architecture with flexible deployment options and production monitoring
+              </p>
+            </div>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
+              <div className="text-center">
+                <div className="bg-white rounded-2xl p-8 shadow-sm border border-gray-200">
+                  <div className="text-5xl font-bold text-blue-600 mb-2">API</div>
+                  <div className="text-lg font-semibold text-gray-900 mb-2">First Design</div>
+                  <div className="text-sm text-gray-600">Flexible integration with any system or visualization tool</div>
+                </div>
+              </div>
+              
+              <div className="text-center">
+                <div className="bg-white rounded-2xl p-8 shadow-sm border border-gray-200">
+                  <div className="text-5xl font-bold text-green-600 mb-2">Cloud</div>
+                  <div className="text-lg font-semibold text-gray-900 mb-2">Agnostic</div>
+                  <div className="text-sm text-gray-600">Deploy on AWS, GCP, Azure, or on-premises infrastructure</div>
+                </div>
+              </div>
+              
+              <div className="text-center">
+                <div className="bg-white rounded-2xl p-8 shadow-sm border border-gray-200">
+                  <div className="text-5xl font-bold text-purple-600 mb-2">Real</div>
+                  <div className="text-lg font-semibold text-gray-900 mb-2">Time</div>
+                  <div className="text-sm text-gray-600">Sub-second inference with horizontal auto-scaling</div>
+                </div>
+              </div>
+              
+              <div className="text-center">
+                <div className="bg-white rounded-2xl p-8 shadow-sm border border-gray-200">
+                  <div className="text-5xl font-bold text-orange-600 mb-2">MLOps</div>
+                  <div className="text-lg font-semibold text-gray-900 mb-2">Ready</div>
+                  <div className="text-sm text-gray-600">Model versioning, monitoring, and automated retraining</div>
+                </div>
+              </div>
+            </div>
+            
+            <div className="mt-16">
+              <div className="bg-gradient-to-r from-blue-600 to-purple-600 rounded-2xl p-8 text-white">
+                <div className="max-w-3xl mx-auto text-center">
+                  <h3 className="text-2xl font-bold mb-4">Ready to Deploy Decision Intelligence?</h3>
+                  <p className="text-lg mb-8 text-blue-100">
+                    Experience the power of modular AI architecture designed for quantitative finance. 
+                    From prototype to production in minutes, not months.
+                  </p>
+                  <div className="flex flex-col sm:flex-row gap-4 justify-center">
+                    <Link
+                      href="/dashboard"
+                      className="bg-white text-blue-600 px-8 py-3 rounded-lg font-semibold hover:bg-blue-50 transition-colors"
+                    >
+                      Explore Platform
+                    </Link>
+                    <Link
+                      href="https://calendly.com/raminfazli/freecall"
+                      className="border border-white text-white px-8 py-3 rounded-lg font-semibold hover:bg-white/10 transition-colors"
+                    >
+                      Request Enterprise Access
+                    </Link>
+                  </div>
                 </div>
               </div>
             </div>
