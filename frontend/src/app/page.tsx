@@ -103,6 +103,7 @@ export default function HomePage() {
               </Link>
               <Link
                 href="https://calendly.com/raminfazli/freecall"
+                target="_blank"
                 className="text-sm font-semibold leading-6 text-white hover:text-blue-400 flex items-center transition-colors"
               >
                 Request Enterprise Demo
@@ -466,6 +467,7 @@ export default function HomePage() {
                     </Link>
                     <Link
                       href="https://calendly.com/raminfazli/freecall"
+                      target="_blank"
                       className="border border-white text-white px-8 py-3 rounded-lg font-semibold hover:bg-white/10 transition-colors"
                     >
                       Request Enterprise Access
