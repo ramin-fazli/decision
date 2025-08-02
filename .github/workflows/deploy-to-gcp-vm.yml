@@ -890,12 +890,12 @@ jobs:
         
         # Copy nginx config and init scripts
         echo "� Copying docker and scripts directories..."
-        gcloud compute scp --recurse docker/ ${{ env.VM_NAME }}:~/docker/ \
+        gcloud compute scp docker/nginx.conf ${{ env.VM_NAME }}:~/nginx.conf \
           --zone=${{ env.VM_ZONE }} \
           --project=${{ secrets.GCP_PROJECT_ID }} \
           --scp-flag="-o ConnectTimeout=10"
         
-        gcloud compute scp --recurse scripts/ ${{ env.VM_NAME }}:~/scripts/ \
+        gcloud compute scp scripts/init-db.sql ${{ env.VM_NAME }}:~/init-db.sql \
           --zone=${{ env.VM_ZONE }} \
           --project=${{ secrets.GCP_PROJECT_ID }} \
           --scp-flag="-o ConnectTimeout=10"
@@ -910,8 +910,10 @@ jobs:
             ~/deploy.sh && 
             sudo mv ~/decision-platform.env /opt/decision-platform/.env && 
             sudo mv ~/docker-compose.prod.yml /opt/decision-platform/ &&
-            sudo cp -r ~/docker /opt/decision-platform/ &&
-            sudo cp -r ~/scripts /opt/decision-platform/ &&
+            sudo mkdir -p /opt/decision-platform/docker &&
+            sudo mkdir -p /opt/decision-platform/scripts &&
+            sudo mv ~/nginx.conf /opt/decision-platform/docker/nginx.conf &&
+            sudo mv ~/init-db.sql /opt/decision-platform/scripts/init-db.sql &&
             sudo chown -R \$USER:\$USER /opt/decision-platform && 
             chmod +x ~/start-containers.sh && 
             cd /opt/decision-platform && 
