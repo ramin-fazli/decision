@@ -402,6 +402,72 @@ jobs:
         
         echo "✅ VM is ready for deployment"
 
+    - name: Setup VM environment
+      run: |
+        echo "🔧 Setting up VM environment..."
+        
+        # Create a setup script for the VM
+        cat > vm-setup.sh << 'EOF'
+        #!/bin/bash
+        set -e
+        
+        echo "🔧 Setting up VM environment..."
+        
+        # Update system packages (only if last update was more than a day ago)
+        if [ ! -f /var/lib/apt/periodic/update-success-stamp ] || [ $(find /var/lib/apt/periodic/update-success-stamp -mtime +1) ]; then
+            echo "Updating system packages..."
+            sudo apt-get update -qq
+        else
+            echo "✅ System packages are up to date"
+        fi
+        
+        # Install required packages if not present
+        REQUIRED_PACKAGES="curl wget unzip"
+        MISSING_PACKAGES=""
+        for pkg in $REQUIRED_PACKAGES; do
+            if ! dpkg -l | grep -q "^ii  $pkg "; then
+                MISSING_PACKAGES="$MISSING_PACKAGES $pkg"
+            fi
+        done
+        
+        if [ -n "$MISSING_PACKAGES" ]; then
+            echo "Installing missing packages:$MISSING_PACKAGES"
+            sudo apt-get install -y $MISSING_PACKAGES
+        else
+            echo "✅ All required packages are already installed"
+        fi
+        
+        # Check Google Cloud SDK installation
+        if ! command -v gcloud &> /dev/null; then
+            echo "Installing Google Cloud SDK..."
+            curl https://sdk.cloud.google.com | bash
+            exec -l $SHELL
+            gcloud init --skip-diagnostics
+        else
+            echo "✅ Google Cloud SDK is already installed"
+        fi
+        
+        # Ensure user is in docker group (safe to run multiple times)
+        sudo usermod -aG docker $USER || true
+        sudo usermod -aG docker ubuntu || true
+        
+        echo "✅ VM environment setup completed"
+        EOF
+        
+        chmod +x vm-setup.sh
+        
+        # Copy and execute setup script on VM
+        gcloud compute scp vm-setup.sh ${{ env.VM_NAME }}:~/vm-setup.sh \
+          --zone=${{ env.VM_ZONE }} \
+          --project=${{ secrets.GCP_PROJECT_ID }} \
+          --scp-flag="-o ConnectTimeout=10"
+        
+        gcloud compute ssh ${{ env.VM_NAME }} \
+          --zone=${{ env.VM_ZONE }} \
+          --project=${{ secrets.GCP_PROJECT_ID }} \
+          --ssh-flag="-o ConnectTimeout=10" \
+          --command="chmod +x ~/vm-setup.sh && ~/vm-setup.sh"
+
     - name: Create deployment script
       run: |
         cat > deploy.sh << 'EOF'
@@ -415,75 +481,110 @@ jobs:
         FRONTEND_IMAGE="${{ env.GAR_LOCATION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ env.GAR_REPOSITORY }}/${{ env.FRONTEND_IMAGE_NAME }}:latest"
         SERVICE_NAME="${{ env.SERVICE_NAME }}"
         
+        # Check if Docker is installed, install if not
+        echo "🐳 Checking Docker installation..."
+        if ! command -v docker &> /dev/null; then
+            echo "Docker not found. Installing Docker..."
+            curl -fsSL https://get.docker.com -o get-docker.sh
+            sudo sh get-docker.sh
+            sudo usermod -aG docker $USER
+            sudo usermod -aG docker ubuntu 2>/dev/null || true
+            rm get-docker.sh
+        else
+            echo "✅ Docker is already installed"
+        fi
+        
+        # Check if Docker Compose is installed, install if not
+        echo "🐳 Checking Docker Compose installation..."
+        if ! command -v docker-compose &> /dev/null; then
+            echo "Docker Compose not found. Installing Docker Compose..."
+            sudo curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+            sudo chmod +x /usr/local/bin/docker-compose
+        else
+            echo "✅ Docker Compose is already installed"
+        fi
+        
+        # Ensure Docker service is running
+        echo "🚀 Ensuring Docker service is running..."
+        if ! sudo systemctl is-active --quiet docker; then
+            echo "Starting Docker service..."
+            sudo systemctl start docker
+        else
+            echo "✅ Docker service is already running"
+        fi
+        sudo systemctl enable docker
+        
+        # Wait for Docker to be ready
+        echo "⏳ Waiting for Docker to be ready..."
+        for i in {1..30}; do
+            if sudo docker info >/dev/null 2>&1; then
+                echo "✅ Docker is ready"
+                break
+            fi
+            if [ $i -eq 30 ]; then
+                echo "❌ Docker failed to start after 30 attempts"
+                sudo systemctl status docker
+                exit 1
+            fi
+            echo "⏳ Waiting for Docker to start... ($i/30)"
+            sleep 2
+        done
+        
         # Create application directory with proper structure
         sudo mkdir -p /opt/decision-platform/{logs,uploads,models,data}
         cd /opt/decision-platform
         
-        # Ensure current user is in docker group and refresh group membership
-        sudo usermod -aG docker $USER
+        # Ensure current user is in docker group
+        sudo usermod -aG docker $USER 2>/dev/null || true
         sudo usermod -aG docker ubuntu 2>/dev/null || true
         
-        # Authenticate Docker with GCP (use sudo if needed)
+        # Authenticate Docker with GCP
         echo "🔐 Authenticating Docker with GCP..."
-        if docker info >/dev/null 2>&1; then
-            gcloud auth configure-docker ${{ env.GAR_LOCATION }}-docker.pkg.dev --quiet
+        if sudo docker info >/dev/null 2>&1; then
+            # Try to configure docker auth - if it fails, we'll use sudo for docker commands
+            if ! gcloud auth configure-docker ${{ env.GAR_LOCATION }}-docker.pkg.dev --quiet 2>/dev/null; then
+                echo "Authenticating with sudo (due to permissions)..."
+                sudo -u root bash -c "gcloud auth configure-docker ${{ env.GAR_LOCATION }}-docker.pkg.dev --quiet"
+            fi
         else
-            echo "Using sudo for Docker commands due to permission issues..."
-            sudo -u root bash -c "gcloud auth configure-docker ${{ env.GAR_LOCATION }}-docker.pkg.dev --quiet"
+            echo "❌ Docker is not running properly"
+            sudo systemctl status docker
+            exit 1
         fi
         
-        # Pull latest images (with fallback to sudo)
+        # Determine if we need sudo for docker commands
+        USE_SUDO=""
+        if ! docker info >/dev/null 2>&1; then
+            echo "Using sudo for Docker commands due to permission requirements"
+            USE_SUDO="sudo"
+        fi
+        
+        # Pull latest images
         echo "📥 Pulling latest Docker images..."
-        if docker info >/dev/null 2>&1; then
-            docker pull "$BACKEND_IMAGE"
-            docker pull "$FRONTEND_IMAGE"
-        else
-            sudo docker pull "$BACKEND_IMAGE"
-            sudo docker pull "$FRONTEND_IMAGE"
-        fi
+        $USE_SUDO docker pull "$BACKEND_IMAGE"
+        $USE_SUDO docker pull "$FRONTEND_IMAGE"
         
-        # Stop existing containers if running (with fallback to sudo)
+        # Stop existing containers if running
         echo "🛑 Stopping existing services..."
-        if docker info >/dev/null 2>&1; then
-            docker-compose -f /opt/decision-platform/docker-compose.yml down 2>/dev/null || true
-        else
-            sudo docker-compose -f /opt/decision-platform/docker-compose.yml down 2>/dev/null || true
-        fi
+        $USE_SUDO docker-compose -f /opt/decision-platform/docker-compose.prod.yml down 2>/dev/null || true
         
         # Clean up old images (keep last 3) 
         echo "🧹 Cleaning up old local images..."
-        if docker info >/dev/null 2>&1; then
-            # Clean up old backend images
-            OLD_BACKEND_IMAGES=$(docker images "${{ env.GAR_LOCATION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ env.GAR_REPOSITORY }}/${{ env.BACKEND_IMAGE_NAME }}" --format "{{.ID}} {{.CreatedAt}}" | sort -k2 -r | tail -n +4 | awk '{print $1}')
-            if [ -n "$OLD_BACKEND_IMAGES" ]; then
-                echo "$OLD_BACKEND_IMAGES" | xargs -r docker rmi -f || true
-            fi
-            
-            # Clean up old frontend images
-            OLD_FRONTEND_IMAGES=$(docker images "${{ env.GAR_LOCATION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ env.GAR_REPOSITORY }}/${{ env.FRONTEND_IMAGE_NAME }}" --format "{{.ID}} {{.CreatedAt}}" | sort -k2 -r | tail -n +4 | awk '{print $1}')
-            if [ -n "$OLD_FRONTEND_IMAGES" ]; then
-                echo "$OLD_FRONTEND_IMAGES" | xargs -r docker rmi -f || true
-            fi
-        else
-            # Same logic with sudo
-            OLD_BACKEND_IMAGES=$(sudo docker images "${{ env.GAR_LOCATION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ env.GAR_REPOSITORY }}/${{ env.BACKEND_IMAGE_NAME }}" --format "{{.ID}} {{.CreatedAt}}" | sort -k2 -r | tail -n +4 | awk '{print $1}')
-            if [ -n "$OLD_BACKEND_IMAGES" ]; then
-                echo "$OLD_BACKEND_IMAGES" | xargs -r sudo docker rmi -f || true
-            fi
-            
-            OLD_FRONTEND_IMAGES=$(sudo docker images "${{ env.GAR_LOCATION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ env.GAR_REPOSITORY }}/${{ env.FRONTEND_IMAGE_NAME }}" --format "{{.ID}} {{.CreatedAt}}" | sort -k2 -r | tail -n +4 | awk '{print $1}')
-            if [ -n "$OLD_FRONTEND_IMAGES" ]; then
-                echo "$OLD_FRONTEND_IMAGES" | xargs -r sudo docker rmi -f || true
-            fi
+        # Clean up old backend images
+        OLD_BACKEND_IMAGES=$($USE_SUDO docker images "${{ env.GAR_LOCATION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ env.GAR_REPOSITORY }}/${{ env.BACKEND_IMAGE_NAME }}" --format "{{.ID}} {{.CreatedAt}}" | sort -k2 -r | tail -n +4 | awk '{print $1}')
+        if [ -n "$OLD_BACKEND_IMAGES" ]; then
+            echo "$OLD_BACKEND_IMAGES" | xargs -r $USE_SUDO docker rmi -f || true
+        fi
+        
+        # Clean up old frontend images
+        OLD_FRONTEND_IMAGES=$($USE_SUDO docker images "${{ env.GAR_LOCATION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ env.GAR_REPOSITORY }}/${{ env.FRONTEND_IMAGE_NAME }}" --format "{{.ID}} {{.CreatedAt}}" | sort -k2 -r | tail -n +4 | awk '{print $1}')
+        if [ -n "$OLD_FRONTEND_IMAGES" ]; then
+            echo "$OLD_FRONTEND_IMAGES" | xargs -r $USE_SUDO docker rmi -f || true
         fi
         
         # Also clean up dangling images
         echo "🧹 Cleaning up dangling images..."
-        if docker info >/dev/null 2>&1; then
-            docker image prune -f || true
-        else
-            sudo docker image prune -f || true
-        fi
+        $USE_SUDO docker image prune -f || true
         
         echo "🎉 Deployment completed successfully!"
         EOF
@@ -768,17 +869,28 @@ jobs:
         
         cd /opt/decision-platform
         
-        # Determine if we need to use sudo for docker commands
-        USE_SUDO=""
-        if ! docker info >/dev/null 2>&1; then
-            echo "Using sudo for Docker commands due to permission issues..."
-            USE_SUDO="sudo"
-        fi
-        
         # Ensure environment file exists
         if [ ! -f "/opt/decision-platform/.env" ]; then
             echo "❌ Environment file not found at /opt/decision-platform/.env"
             exit 1
+        fi
+        
+        # Determine if we need sudo for docker commands
+        USE_SUDO=""
+        if ! docker info >/dev/null 2>&1; then
+            echo "Using sudo for Docker commands due to permission requirements"
+            USE_SUDO="sudo"
+        fi
+        
+        # Verify Docker is running
+        if ! $USE_SUDO docker info >/dev/null 2>&1; then
+            echo "❌ Docker is not running. Starting Docker..."
+            sudo systemctl start docker
+            sleep 5
+            if ! $USE_SUDO docker info >/dev/null 2>&1; then
+                echo "❌ Failed to start Docker"
+                exit 1
+            fi
         fi
         
         # Fix permissions for mounted volumes
@@ -794,11 +906,7 @@ jobs:
         
         # Start services with docker-compose
         echo "🚀 Starting Decision Platform services..."
-        if [ -n "$USE_SUDO" ]; then
-            sudo docker-compose -f docker-compose.prod.yml --env-file .env up -d
-        else
-            docker-compose -f docker-compose.prod.yml --env-file .env up -d
-        fi
+        $USE_SUDO docker-compose -f docker-compose.prod.yml --env-file .env up -d
         
         # Wait for services to be ready
         echo "⏳ Waiting for services to be ready..."
@@ -906,6 +1014,11 @@ jobs:
           --project=${{ secrets.GCP_PROJECT_ID }} \
           --ssh-flag="-o ConnectTimeout=10 -o ServerAliveInterval=30 -o ServerAliveCountMax=3" \
           --command="
+            # Set up gcloud authentication for the VM
+            echo '${{ secrets.GCP_SA_KEY }}' | base64 -d > /tmp/gcp-key.json &&
+            gcloud auth activate-service-account --key-file=/tmp/gcp-key.json &&
+            gcloud config set project ${{ secrets.GCP_PROJECT_ID }} &&
+            rm /tmp/gcp-key.json &&
             chmod +x ~/deploy.sh && 
             ~/deploy.sh && 
             sudo mv ~/decision-platform.env /opt/decision-platform/.env && 
