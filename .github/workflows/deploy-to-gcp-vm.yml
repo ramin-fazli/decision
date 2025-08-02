@@ -538,53 +538,67 @@ jobs:
         sudo usermod -aG docker $USER 2>/dev/null || true
         sudo usermod -aG docker ubuntu 2>/dev/null || true
         
-        # Authenticate Docker with GCP
+        # Authenticate Docker with GCP (use sudo if needed)
         echo "🔐 Authenticating Docker with GCP..."
-        if sudo docker info >/dev/null 2>&1; then
-            # Try to configure docker auth - if it fails, we'll use sudo for docker commands
-            if ! gcloud auth configure-docker ${{ env.GAR_LOCATION }}-docker.pkg.dev --quiet 2>/dev/null; then
-                echo "Authenticating with sudo (due to permissions)..."
-                sudo -u root bash -c "gcloud auth configure-docker ${{ env.GAR_LOCATION }}-docker.pkg.dev --quiet"
-            fi
+        if docker info >/dev/null 2>&1; then
+            gcloud auth configure-docker ${{ env.GAR_LOCATION }}-docker.pkg.dev --quiet
         else
-            echo "❌ Docker is not running properly"
-            sudo systemctl status docker
-            exit 1
+            echo "Using sudo for Docker commands due to permission issues..."
+            sudo -u root bash -c "gcloud auth configure-docker ${{ env.GAR_LOCATION }}-docker.pkg.dev --quiet"
         fi
         
-        # Determine if we need sudo for docker commands
-        USE_SUDO=""
-        if ! docker info >/dev/null 2>&1; then
-            echo "Using sudo for Docker commands due to permission requirements"
-            USE_SUDO="sudo"
-        fi
-        
-        # Pull latest images
+        # Pull latest images (with fallback to sudo)
         echo "📥 Pulling latest Docker images..."
-        $USE_SUDO docker pull "$BACKEND_IMAGE"
-        $USE_SUDO docker pull "$FRONTEND_IMAGE"
+        if docker info >/dev/null 2>&1; then
+            docker pull "$BACKEND_IMAGE"
+            docker pull "$FRONTEND_IMAGE"
+        else
+            sudo docker pull "$BACKEND_IMAGE"
+            sudo docker pull "$FRONTEND_IMAGE"
+        fi
         
-        # Stop existing containers if running
+        # Stop existing containers if running (with fallback to sudo)
         echo "🛑 Stopping existing services..."
-        $USE_SUDO docker-compose -f /opt/decision-platform/docker-compose.prod.yml down 2>/dev/null || true
+        if docker info >/dev/null 2>&1; then
+            docker-compose -f /opt/decision-platform/docker-compose.prod.yml down 2>/dev/null || true
+        else
+            sudo docker-compose -f /opt/decision-platform/docker-compose.prod.yml down 2>/dev/null || true
+        fi
         
         # Clean up old images (keep last 3) 
         echo "🧹 Cleaning up old local images..."
-        # Clean up old backend images
-        OLD_BACKEND_IMAGES=$($USE_SUDO docker images "${{ env.GAR_LOCATION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ env.GAR_REPOSITORY }}/${{ env.BACKEND_IMAGE_NAME }}" --format "{{.ID}} {{.CreatedAt}}" | sort -k2 -r | tail -n +4 | awk '{print $1}')
-        if [ -n "$OLD_BACKEND_IMAGES" ]; then
-            echo "$OLD_BACKEND_IMAGES" | xargs -r $USE_SUDO docker rmi -f || true
-        fi
-        
-        # Clean up old frontend images
-        OLD_FRONTEND_IMAGES=$($USE_SUDO docker images "${{ env.GAR_LOCATION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ env.GAR_REPOSITORY }}/${{ env.FRONTEND_IMAGE_NAME }}" --format "{{.ID}} {{.CreatedAt}}" | sort -k2 -r | tail -n +4 | awk '{print $1}')
-        if [ -n "$OLD_FRONTEND_IMAGES" ]; then
-            echo "$OLD_FRONTEND_IMAGES" | xargs -r $USE_SUDO docker rmi -f || true
+        if docker info >/dev/null 2>&1; then
+            # Clean up old backend images
+            OLD_BACKEND_IMAGES=$(docker images "${{ env.GAR_LOCATION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ env.GAR_REPOSITORY }}/${{ env.BACKEND_IMAGE_NAME }}" --format "{{.ID}} {{.CreatedAt}}" | sort -k2 -r | tail -n +4 | awk '{print $1}')
+            if [ -n "$OLD_BACKEND_IMAGES" ]; then
+                echo "$OLD_BACKEND_IMAGES" | xargs -r docker rmi -f || true
+            fi
+            
+            # Clean up old frontend images
+            OLD_FRONTEND_IMAGES=$(docker images "${{ env.GAR_LOCATION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ env.GAR_REPOSITORY }}/${{ env.FRONTEND_IMAGE_NAME }}" --format "{{.ID}} {{.CreatedAt}}" | sort -k2 -r | tail -n +4 | awk '{print $1}')
+            if [ -n "$OLD_FRONTEND_IMAGES" ]; then
+                echo "$OLD_FRONTEND_IMAGES" | xargs -r docker rmi -f || true
+            fi
+        else
+            # Same logic with sudo
+            OLD_BACKEND_IMAGES=$(sudo docker images "${{ env.GAR_LOCATION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ env.GAR_REPOSITORY }}/${{ env.BACKEND_IMAGE_NAME }}" --format "{{.ID}} {{.CreatedAt}}" | sort -k2 -r | tail -n +4 | awk '{print $1}')
+            if [ -n "$OLD_BACKEND_IMAGES" ]; then
+                echo "$OLD_BACKEND_IMAGES" | xargs -r sudo docker rmi -f || true
+            fi
+            
+            OLD_FRONTEND_IMAGES=$(sudo docker images "${{ env.GAR_LOCATION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ env.GAR_REPOSITORY }}/${{ env.FRONTEND_IMAGE_NAME }}" --format "{{.ID}} {{.CreatedAt}}" | sort -k2 -r | tail -n +4 | awk '{print $1}')
+            if [ -n "$OLD_FRONTEND_IMAGES" ]; then
+                echo "$OLD_FRONTEND_IMAGES" | xargs -r sudo docker rmi -f || true
+            fi
         fi
         
         # Also clean up dangling images
         echo "🧹 Cleaning up dangling images..."
-        $USE_SUDO docker image prune -f || true
+        if docker info >/dev/null 2>&1; then
+            docker image prune -f || true
+        else
+            sudo docker image prune -f || true
+        fi
         
         echo "🎉 Deployment completed successfully!"
         EOF
@@ -875,19 +889,12 @@ jobs:
             exit 1
         fi
         
-        # Determine if we need sudo for docker commands
-        USE_SUDO=""
-        if ! docker info >/dev/null 2>&1; then
-            echo "Using sudo for Docker commands due to permission requirements"
-            USE_SUDO="sudo"
-        fi
-        
         # Verify Docker is running
-        if ! $USE_SUDO docker info >/dev/null 2>&1; then
+        if ! docker info >/dev/null 2>&1; then
             echo "❌ Docker is not running. Starting Docker..."
             sudo systemctl start docker
             sleep 5
-            if ! $USE_SUDO docker info >/dev/null 2>&1; then
+            if ! docker info >/dev/null 2>&1; then
                 echo "❌ Failed to start Docker"
                 exit 1
             fi
@@ -904,9 +911,13 @@ jobs:
         sudo chmod -R 755 /opt/decision-platform/models
         sudo chmod -R 755 /opt/decision-platform/data
         
-        # Start services with docker-compose
+        # Start services with docker-compose (with sudo fallback)
         echo "🚀 Starting Decision Platform services..."
-        $USE_SUDO docker-compose -f docker-compose.prod.yml --env-file .env up -d
+        if docker info >/dev/null 2>&1; then
+            docker-compose -f docker-compose.prod.yml --env-file .env up -d
+        else
+            sudo docker-compose -f docker-compose.prod.yml --env-file .env up -d
+        fi
         
         # Wait for services to be ready
         echo "⏳ Waiting for services to be ready..."
@@ -914,16 +925,30 @@ jobs:
         
         # Verify deployment
         echo "🔍 Verifying deployment..."
-        if $USE_SUDO docker-compose -f docker-compose.prod.yml ps | grep -q "Up"; then
-          echo "✅ Services are running successfully!"
-          
-          # Display service status
-          echo "📊 Service Status:"
-          $USE_SUDO docker-compose -f docker-compose.prod.yml ps
+        if docker info >/dev/null 2>&1; then
+            if docker-compose -f docker-compose.prod.yml ps | grep -q "Up"; then
+                echo "✅ Services are running successfully!"
+                
+                # Display service status
+                echo "📊 Service Status:"
+                docker-compose -f docker-compose.prod.yml ps
+            else
+                echo "❌ Some services failed to start!"
+                docker-compose -f docker-compose.prod.yml logs --tail 10
+                exit 1
+            fi
         else
-          echo "❌ Some services failed to start!"
-          $USE_SUDO docker-compose -f docker-compose.prod.yml logs --tail 10
-          exit 1
+            if sudo docker-compose -f docker-compose.prod.yml ps | grep -q "Up"; then
+                echo "✅ Services are running successfully!"
+                
+                # Display service status
+                echo "📊 Service Status:"
+                sudo docker-compose -f docker-compose.prod.yml ps
+            else
+                echo "❌ Some services failed to start!"
+                sudo docker-compose -f docker-compose.prod.yml logs --tail 10
+                exit 1
+            fi
         fi
         
         # Health checks
@@ -937,7 +962,11 @@ jobs:
           fi
           if [ $i -eq 6 ]; then
             echo "⚠️ Backend health check failed"
-            $USE_SUDO docker-compose -f docker-compose.prod.yml logs backend --tail 10
+            if docker info >/dev/null 2>&1; then
+                docker-compose -f docker-compose.prod.yml logs backend --tail 10
+            else
+                sudo docker-compose -f docker-compose.prod.yml logs backend --tail 10
+            fi
           fi
           echo "⏳ Waiting for backend to be ready... ($i/6)"
           sleep 10
@@ -951,7 +980,11 @@ jobs:
           fi
           if [ $i -eq 6 ]; then
             echo "⚠️ Frontend health check failed"
-            $USE_SUDO docker-compose -f docker-compose.prod.yml logs frontend --tail 10
+            if docker info >/dev/null 2>&1; then
+                docker-compose -f docker-compose.prod.yml logs frontend --tail 10
+            else
+                sudo docker-compose -f docker-compose.prod.yml logs frontend --tail 10
+            fi
           fi
           echo "⏳ Waiting for frontend to be ready... ($i/6)"
           sleep 10
@@ -1007,25 +1040,6 @@ jobs:
           --zone=${{ env.VM_ZONE }} \
           --project=${{ secrets.GCP_PROJECT_ID }} \
           --scp-flag="-o ConnectTimeout=10"
-        
-        # Create and copy GCP service account key file
-        echo '${{ secrets.GCP_SA_KEY }}' | base64 -d > gcp-service-account-key.json
-        gcloud compute scp gcp-service-account-key.json ${{ env.VM_NAME }}:~/gcp-key.json \
-          --zone=${{ env.VM_ZONE }} \
-          --project=${{ secrets.GCP_PROJECT_ID }} \
-          --scp-flag="-o ConnectTimeout=10"
-        rm gcp-service-account-key.json
-        
-        # Set up gcloud authentication on VM
-        gcloud compute ssh ${{ env.VM_NAME }} \
-          --zone=${{ env.VM_ZONE }} \
-          --project=${{ secrets.GCP_PROJECT_ID }} \
-          --ssh-flag="-o ConnectTimeout=10" \
-          --command="
-            gcloud auth activate-service-account --key-file=~/gcp-key.json &&
-            gcloud config set project ${{ secrets.GCP_PROJECT_ID }} &&
-            rm ~/gcp-key.json
-          "
         
         # Execute deployment on VM with timeout
         timeout 900 gcloud compute ssh ${{ env.VM_NAME }} \
