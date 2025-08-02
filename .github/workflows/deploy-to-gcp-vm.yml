@@ -1,0 +1,966 @@
+# Deploy Decision Platform to GCP VM
+# 
+# Required GitHub Secrets:
+# - GCP_SA_KEY: Service account key JSON for GCP authentication
+# - GCP_PROJECT_ID: Google Cloud Project ID
+# - DB_PASSWORD: PostgreSQL database password
+# - SECRET_KEY: FastAPI secret key for JWT tokens
+# - MINIO_ACCESS_KEY: MinIO access key
+# - MINIO_SECRET_KEY: MinIO secret key
+# - AWS_ACCESS_KEY_ID: AWS access key (optional)
+# - AWS_SECRET_ACCESS_KEY: AWS secret key (optional)
+# - AZURE_SUBSCRIPTION_ID: Azure subscription ID (optional)
+# - SENTRY_DSN: Sentry DSN for error tracking (optional)
+
+name: Deploy Decision Platform to GCP VM
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+    inputs:
+      force_deploy:
+        description: 'Force deployment even if no changes'
+        required: false
+        default: false
+        type: boolean
+
+env:
+  GAR_LOCATION: us-east4
+  GAR_REPOSITORY: decision-platform
+  BACKEND_IMAGE_NAME: decision-backend
+  FRONTEND_IMAGE_NAME: decision-frontend
+  VM_ZONE: us-east4-c
+  VM_NAME: decision-platform-vm
+  SERVICE_NAME: decision
+
+jobs:
+  # Job 1: Build and push backend to Artifact Registry
+  build-backend:
+    name: Build and Push Backend Image
+    runs-on: ubuntu-latest
+    
+    permissions:
+      contents: read
+      id-token: write
+      security-events: write
+      actions: read
+
+    outputs:
+      image-digest: ${{ steps.build.outputs.digest }}
+      image-tag: ${{ steps.meta.outputs.tags }}
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+      with:
+        platforms: linux/amd64
+
+    - name: Authenticate to Google Cloud
+      uses: google-github-actions/auth@v2
+      with:
+        credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+    - name: Set up Cloud SDK
+      uses: google-github-actions/setup-gcloud@v2
+      with:
+        version: latest
+
+    - name: Configure Docker for Artifact Registry
+      run: |
+        gcloud auth configure-docker ${{ env.GAR_LOCATION }}-docker.pkg.dev --quiet
+
+    - name: Create Artifact Registry repository (if needed)
+      run: |
+        gcloud artifacts repositories create ${{ env.GAR_REPOSITORY }} \
+          --repository-format=docker \
+          --location=${{ env.GAR_LOCATION }} \
+          --project=${{ secrets.GCP_PROJECT_ID }} \
+          --description="Decision platform Docker images" 2>/dev/null || true
+
+    - name: Extract backend metadata
+      id: meta
+      uses: docker/metadata-action@v5
+      with:
+        images: ${{ env.GAR_LOCATION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ env.GAR_REPOSITORY }}/${{ env.BACKEND_IMAGE_NAME }}
+        tags: |
+          type=ref,event=branch
+          type=sha,prefix={{branch}}-
+          type=raw,value=latest
+
+    - name: Build and push backend Docker image
+      id: build
+      uses: docker/build-push-action@v5
+      with:
+        context: ./backend
+        file: ./backend/Dockerfile
+        platforms: linux/amd64
+        push: true
+        tags: ${{ steps.meta.outputs.tags }}
+        labels: ${{ steps.meta.outputs.labels }}
+        build-args: |
+          BUILD_DATE=${{ github.event.head_commit.timestamp }}
+          VCS_REF=${{ github.sha }}
+          BUILD_VERSION=${{ github.ref_name }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+
+  # Job 2: Build and push frontend to Artifact Registry
+  build-frontend:
+    name: Build and Push Frontend Image
+    runs-on: ubuntu-latest
+    
+    permissions:
+      contents: read
+      id-token: write
+      security-events: write
+      actions: read
+
+    outputs:
+      image-digest: ${{ steps.build.outputs.digest }}
+      image-tag: ${{ steps.meta.outputs.tags }}
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+      with:
+        platforms: linux/amd64
+
+    - name: Authenticate to Google Cloud
+      uses: google-github-actions/auth@v2
+      with:
+        credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+    - name: Set up Cloud SDK
+      uses: google-github-actions/setup-gcloud@v2
+      with:
+        version: latest
+
+    - name: Configure Docker for Artifact Registry
+      run: |
+        gcloud auth configure-docker ${{ env.GAR_LOCATION }}-docker.pkg.dev --quiet
+
+    - name: Extract frontend metadata
+      id: meta
+      uses: docker/metadata-action@v5
+      with:
+        images: ${{ env.GAR_LOCATION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ env.GAR_REPOSITORY }}/${{ env.FRONTEND_IMAGE_NAME }}
+        tags: |
+          type=ref,event=branch
+          type=sha,prefix={{branch}}-
+          type=raw,value=latest
+
+    - name: Build and push frontend Docker image
+      id: build
+      uses: docker/build-push-action@v5
+      with:
+        context: ./frontend
+        file: ./frontend/Dockerfile
+        platforms: linux/amd64
+        push: true
+        tags: ${{ steps.meta.outputs.tags }}
+        labels: ${{ steps.meta.outputs.labels }}
+        build-args: |
+          BUILD_DATE=${{ github.event.head_commit.timestamp }}
+          VCS_REF=${{ github.sha }}
+          BUILD_VERSION=${{ github.ref_name }}
+          NEXT_PUBLIC_API_URL=http://localhost:8000
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+
+  # Job 3: Security scanning
+  security-scan:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    needs: [build-backend, build-frontend]
+    
+    steps:
+    - name: Authenticate to Google Cloud
+      uses: google-github-actions/auth@v2
+      with:
+        credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+    - name: Set up Cloud SDK
+      uses: google-github-actions/setup-gcloud@v2
+
+    - name: Security scan backend with Trivy
+      uses: aquasecurity/trivy-action@master
+      with:
+        image-ref: ${{ env.GAR_LOCATION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ env.GAR_REPOSITORY }}/${{ env.BACKEND_IMAGE_NAME }}:latest
+        format: 'sarif'
+        output: 'trivy-backend-results.sarif'
+      continue-on-error: true
+
+    - name: Security scan frontend with Trivy
+      uses: aquasecurity/trivy-action@master
+      with:
+        image-ref: ${{ env.GAR_LOCATION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ env.GAR_REPOSITORY }}/${{ env.FRONTEND_IMAGE_NAME }}:latest
+        format: 'sarif'
+        output: 'trivy-frontend-results.sarif'
+      continue-on-error: true
+
+    - name: Upload security scan results as artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: trivy-scan-results
+        path: |
+          trivy-backend-results.sarif
+          trivy-frontend-results.sarif
+        retention-days: 30
+      continue-on-error: true
+
+  # Job 4: Deploy to GCP VM
+  deploy-to-vm:
+    name: Deploy to GCP VM
+    runs-on: ubuntu-latest
+    needs: [build-backend, build-frontend]
+    if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
+
+    steps:
+    - name: Checkout deployment scripts
+      uses: actions/checkout@v4
+      with:
+        sparse-checkout: |
+          scripts/
+          docker-compose.yml
+          docker/
+          .env.example
+
+    - name: Authenticate to Google Cloud
+      uses: google-github-actions/auth@v2
+      with:
+        credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+    - name: Set up Cloud SDK
+      uses: google-github-actions/setup-gcloud@v2
+
+    - name: Configure firewall rules
+      run: |
+        echo "🔥 Configuring firewall rules for Decision platform..."
+        
+        # Create firewall rule for HTTP (port 80) if it doesn't exist
+        if ! gcloud compute firewall-rules describe allow-decision-http --project=${{ secrets.GCP_PROJECT_ID }} >/dev/null 2>&1; then
+          echo "Creating firewall rule for HTTP (port 80)..."
+          gcloud compute firewall-rules create allow-decision-http \
+            --allow tcp:80 \
+            --source-ranges 0.0.0.0/0 \
+            --target-tags decision-platform \
+            --project=${{ secrets.GCP_PROJECT_ID }}
+        else
+          echo "✅ HTTP firewall rule already exists"
+        fi
+        
+        # Create firewall rule for HTTPS (port 443) if it doesn't exist
+        if ! gcloud compute firewall-rules describe allow-decision-https --project=${{ secrets.GCP_PROJECT_ID }} >/dev/null 2>&1; then
+          echo "Creating firewall rule for HTTPS (port 443)..."
+          gcloud compute firewall-rules create allow-decision-https \
+            --allow tcp:443 \
+            --source-ranges 0.0.0.0/0 \
+            --target-tags decision-platform \
+            --project=${{ secrets.GCP_PROJECT_ID }}
+        else
+          echo "✅ HTTPS firewall rule already exists"
+        fi
+        
+        # Create firewall rule for API (port 8000) if it doesn't exist
+        if ! gcloud compute firewall-rules describe allow-decision-api --project=${{ secrets.GCP_PROJECT_ID }} >/dev/null 2>&1; then
+          echo "Creating firewall rule for API (port 8000)..."
+          gcloud compute firewall-rules create allow-decision-api \
+            --allow tcp:8000 \
+            --source-ranges 0.0.0.0/0 \
+            --target-tags decision-platform \
+            --project=${{ secrets.GCP_PROJECT_ID }}
+        else
+          echo "✅ API firewall rule already exists"
+        fi
+        
+        # Create firewall rule for Frontend (port 3000) if it doesn't exist
+        if ! gcloud compute firewall-rules describe allow-decision-frontend --project=${{ secrets.GCP_PROJECT_ID }} >/dev/null 2>&1; then
+          echo "Creating firewall rule for Frontend (port 3000)..."
+          gcloud compute firewall-rules create allow-decision-frontend \
+            --allow tcp:3000 \
+            --source-ranges 0.0.0.0/0 \
+            --target-tags decision-platform \
+            --project=${{ secrets.GCP_PROJECT_ID }}
+        else
+          echo "✅ Frontend firewall rule already exists"
+        fi
+        
+        # Apply network tags to the VM (this is safe to run multiple times)
+        echo "🏷️ Applying network tags to VM..."
+        gcloud compute instances add-tags ${{ env.VM_NAME }} \
+          --zone=${{ env.VM_ZONE }} \
+          --project=${{ secrets.GCP_PROJECT_ID }} \
+          --tags decision-platform
+        
+        echo "✅ Firewall configuration completed"
+
+    - name: Verify VM exists and is running
+      run: |
+        echo "🔍 Checking VM status..."
+        VM_STATUS=$(gcloud compute instances describe ${{ env.VM_NAME }} \
+          --zone=${{ env.VM_ZONE }} \
+          --project=${{ secrets.GCP_PROJECT_ID }} \
+          --format="value(status)")
+        
+        if [ "$VM_STATUS" != "RUNNING" ]; then
+          echo "⚠️ VM is not running (status: $VM_STATUS)"
+          if [ "$VM_STATUS" = "TERMINATED" ]; then
+            echo "Starting VM..."
+            gcloud compute instances start ${{ env.VM_NAME }} \
+              --zone=${{ env.VM_ZONE }} \
+              --project=${{ secrets.GCP_PROJECT_ID }}
+            sleep 30
+          fi
+        fi
+        
+        echo "✅ VM is ready for deployment"
+
+    - name: Create deployment script
+      run: |
+        cat > deploy.sh << 'EOF'
+        #!/bin/bash
+        set -e
+        
+        echo "🚀 Starting deployment on VM..."
+        
+        # Set variables
+        BACKEND_IMAGE="${{ env.GAR_LOCATION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ env.GAR_REPOSITORY }}/${{ env.BACKEND_IMAGE_NAME }}:latest"
+        FRONTEND_IMAGE="${{ env.GAR_LOCATION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ env.GAR_REPOSITORY }}/${{ env.FRONTEND_IMAGE_NAME }}:latest"
+        SERVICE_NAME="${{ env.SERVICE_NAME }}"
+        
+        # Create application directory with proper structure
+        sudo mkdir -p /opt/decision-platform/{logs,uploads,models,data}
+        cd /opt/decision-platform
+        
+        # Ensure current user is in docker group and refresh group membership
+        sudo usermod -aG docker $USER
+        sudo usermod -aG docker ubuntu 2>/dev/null || true
+        
+        # Authenticate Docker with GCP (use sudo if needed)
+        echo "🔐 Authenticating Docker with GCP..."
+        if docker info >/dev/null 2>&1; then
+            gcloud auth configure-docker ${{ env.GAR_LOCATION }}-docker.pkg.dev --quiet
+        else
+            echo "Using sudo for Docker commands due to permission issues..."
+            sudo -u root bash -c "gcloud auth configure-docker ${{ env.GAR_LOCATION }}-docker.pkg.dev --quiet"
+        fi
+        
+        # Pull latest images (with fallback to sudo)
+        echo "📥 Pulling latest Docker images..."
+        if docker info >/dev/null 2>&1; then
+            docker pull "$BACKEND_IMAGE"
+            docker pull "$FRONTEND_IMAGE"
+        else
+            sudo docker pull "$BACKEND_IMAGE"
+            sudo docker pull "$FRONTEND_IMAGE"
+        fi
+        
+        # Stop existing containers if running (with fallback to sudo)
+        echo "🛑 Stopping existing services..."
+        if docker info >/dev/null 2>&1; then
+            docker-compose -f /opt/decision-platform/docker-compose.yml down 2>/dev/null || true
+        else
+            sudo docker-compose -f /opt/decision-platform/docker-compose.yml down 2>/dev/null || true
+        fi
+        
+        # Clean up old images (keep last 3) 
+        echo "🧹 Cleaning up old local images..."
+        if docker info >/dev/null 2>&1; then
+            # Clean up old backend images
+            OLD_BACKEND_IMAGES=$(docker images "${{ env.GAR_LOCATION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ env.GAR_REPOSITORY }}/${{ env.BACKEND_IMAGE_NAME }}" --format "{{.ID}} {{.CreatedAt}}" | sort -k2 -r | tail -n +4 | awk '{print $1}')
+            if [ -n "$OLD_BACKEND_IMAGES" ]; then
+                echo "$OLD_BACKEND_IMAGES" | xargs -r docker rmi -f || true
+            fi
+            
+            # Clean up old frontend images
+            OLD_FRONTEND_IMAGES=$(docker images "${{ env.GAR_LOCATION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ env.GAR_REPOSITORY }}/${{ env.FRONTEND_IMAGE_NAME }}" --format "{{.ID}} {{.CreatedAt}}" | sort -k2 -r | tail -n +4 | awk '{print $1}')
+            if [ -n "$OLD_FRONTEND_IMAGES" ]; then
+                echo "$OLD_FRONTEND_IMAGES" | xargs -r docker rmi -f || true
+            fi
+        else
+            # Same logic with sudo
+            OLD_BACKEND_IMAGES=$(sudo docker images "${{ env.GAR_LOCATION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ env.GAR_REPOSITORY }}/${{ env.BACKEND_IMAGE_NAME }}" --format "{{.ID}} {{.CreatedAt}}" | sort -k2 -r | tail -n +4 | awk '{print $1}')
+            if [ -n "$OLD_BACKEND_IMAGES" ]; then
+                echo "$OLD_BACKEND_IMAGES" | xargs -r sudo docker rmi -f || true
+            fi
+            
+            OLD_FRONTEND_IMAGES=$(sudo docker images "${{ env.GAR_LOCATION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ env.GAR_REPOSITORY }}/${{ env.FRONTEND_IMAGE_NAME }}" --format "{{.ID}} {{.CreatedAt}}" | sort -k2 -r | tail -n +4 | awk '{print $1}')
+            if [ -n "$OLD_FRONTEND_IMAGES" ]; then
+                echo "$OLD_FRONTEND_IMAGES" | xargs -r sudo docker rmi -f || true
+            fi
+        fi
+        
+        # Also clean up dangling images
+        echo "🧹 Cleaning up dangling images..."
+        if docker info >/dev/null 2>&1; then
+            docker image prune -f || true
+        else
+            sudo docker image prune -f || true
+        fi
+        
+        echo "🎉 Deployment completed successfully!"
+        EOF
+        
+        chmod +x deploy.sh
+
+    - name: Create environment file
+      run: |
+        cat > .env << 'EOF'
+        # === Production Environment Configuration ===
+        APP_NAME=Decision Platform
+        ENVIRONMENT=production
+        DEBUG=false
+        API_VERSION=v1
+        
+        # === Port Configuration ===
+        API_PORT=8000
+        FRONTEND_PORT=3000
+        
+        # === Database Configuration ===
+        DB_HOST=postgres
+        DB_PORT=5432
+        DB_NAME=decision
+        DB_USER=postgres
+        DATABASE_URL=postgresql://postgres:${DB_PASSWORD}@postgres:5432/decision
+        
+        # === Redis Configuration ===
+        REDIS_HOST=redis
+        REDIS_PORT=6379
+        REDIS_DB=0
+        REDIS_URL=redis://redis:6379/0
+        
+        # === Security Configuration ===
+        ALGORITHM=HS256
+        ACCESS_TOKEN_EXPIRE_MINUTES=30
+        REFRESH_TOKEN_EXPIRE_DAYS=7
+        
+        # === API Configuration ===
+        ALLOWED_ORIGINS=http://localhost:3000,http://localhost:80,http://localhost
+        ALLOWED_HOSTS=*
+        API_RATE_LIMIT=100/minute
+        
+        # === File Upload Settings ===
+        MAX_UPLOAD_SIZE=104857600
+        ALLOWED_FILE_TYPES=.csv,.xlsx,.json
+        UPLOAD_PATH=/app/uploads
+        
+        # === ML/AI Configuration ===
+        ML_MODEL_PATH=/app/models
+        ML_FEATURE_STORE_PATH=/app/features
+        ML_EXPERIMENT_TRACKING=true
+        
+        # === Frontend Configuration ===
+        NEXT_PUBLIC_API_URL=http://localhost:8000
+        NEXT_PUBLIC_APP_VERSION=1.0.0
+        NODE_ENV=production
+        
+        # === MinIO Configuration ===
+        MINIO_ROOT_USER=${MINIO_ACCESS_KEY}
+        MINIO_ROOT_PASSWORD=${MINIO_SECRET_KEY}
+        
+        # === Production Settings ===
+        BACKEND_RELOAD=false
+        ENABLE_DEBUG_TOOLBAR=false
+        MOCK_EXTERNAL_APIS=false
+        TESTING=false
+        EOF
+        
+        # Add secrets to environment file
+        echo "DB_PASSWORD=${{ secrets.DB_PASSWORD }}" >> .env
+        echo "SECRET_KEY=${{ secrets.SECRET_KEY }}" >> .env
+        echo "MINIO_ACCESS_KEY=${{ secrets.MINIO_ACCESS_KEY }}" >> .env
+        echo "MINIO_SECRET_KEY=${{ secrets.MINIO_SECRET_KEY }}" >> .env
+        
+        # Add optional cloud provider secrets
+        if [ -n "${{ secrets.AWS_ACCESS_KEY_ID }}" ]; then
+          echo "AWS_ACCESS_KEY_ID=${{ secrets.AWS_ACCESS_KEY_ID }}" >> .env
+          echo "AWS_SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY }}" >> .env
+          echo "AWS_REGION=us-east-1" >> .env
+        fi
+        
+        if [ -n "${{ secrets.AZURE_SUBSCRIPTION_ID }}" ]; then
+          echo "AZURE_SUBSCRIPTION_ID=${{ secrets.AZURE_SUBSCRIPTION_ID }}" >> .env
+        fi
+        
+        if [ -n "${{ secrets.SENTRY_DSN }}" ]; then
+          echo "SENTRY_DSN=${{ secrets.SENTRY_DSN }}" >> .env
+        fi
+
+    - name: Create production docker-compose file
+      run: |
+        cat > docker-compose.prod.yml << 'EOF'
+        services:
+          # PostgreSQL Database
+          postgres:
+            image: postgres:15-alpine
+            container_name: decision-postgres
+            environment:
+              POSTGRES_USER: ${DB_USER:-postgres}
+              POSTGRES_PASSWORD: ${DB_PASSWORD}
+              POSTGRES_DB: ${DB_NAME:-decision}
+            volumes:
+              - postgres_data:/var/lib/postgresql/data
+              - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/init.sql
+            ports:
+              - "5432:5432"
+            networks:
+              - decision-network
+            healthcheck:
+              test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres}"]
+              interval: 30s
+              timeout: 10s
+              retries: 3
+            restart: unless-stopped
+
+          # Redis Cache
+          redis:
+            image: redis:7-alpine
+            container_name: decision-redis
+            command: redis-server --appendonly yes
+            volumes:
+              - redis_data:/data
+            ports:
+              - "6379:6379"
+            networks:
+              - decision-network
+            healthcheck:
+              test: ["CMD", "redis-cli", "ping"]
+              interval: 30s
+              timeout: 10s
+              retries: 3
+            restart: unless-stopped
+
+          # Backend API
+          backend:
+            image: ${{ env.GAR_LOCATION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ env.GAR_REPOSITORY }}/${{ env.BACKEND_IMAGE_NAME }}:latest
+            container_name: decision-backend
+            environment:
+              - DATABASE_URL=postgresql://${DB_USER:-postgres}:${DB_PASSWORD}@postgres:5432/${DB_NAME:-decision}
+              - REDIS_URL=redis://redis:6379/0
+              - ENVIRONMENT=production
+              - SECRET_KEY=${SECRET_KEY}
+              - DEBUG=false
+            volumes:
+              - /opt/decision-platform/uploads:/app/uploads
+              - /opt/decision-platform/models:/app/models
+              - /opt/decision-platform/logs:/app/logs
+            ports:
+              - "8000:8000"
+            networks:
+              - decision-network
+            depends_on:
+              postgres:
+                condition: service_healthy
+              redis:
+                condition: service_healthy
+            restart: unless-stopped
+            healthcheck:
+              test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+              interval: 30s
+              timeout: 10s
+              retries: 3
+
+          # Celery Worker
+          celery-worker:
+            image: ${{ env.GAR_LOCATION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ env.GAR_REPOSITORY }}/${{ env.BACKEND_IMAGE_NAME }}:latest
+            container_name: decision-celery-worker
+            command: celery -A tasks.celery_app worker --loglevel=info
+            environment:
+              - DATABASE_URL=postgresql://${DB_USER:-postgres}:${DB_PASSWORD}@postgres:5432/${DB_NAME:-decision}
+              - REDIS_URL=redis://redis:6379/0
+              - ENVIRONMENT=production
+              - SECRET_KEY=${SECRET_KEY}
+            volumes:
+              - /opt/decision-platform/uploads:/app/uploads
+              - /opt/decision-platform/models:/app/models
+              - /opt/decision-platform/logs:/app/logs
+            networks:
+              - decision-network
+            depends_on:
+              postgres:
+                condition: service_healthy
+              redis:
+                condition: service_healthy
+              backend:
+                condition: service_started
+            restart: unless-stopped
+
+          # Celery Beat (Scheduler)
+          celery-beat:
+            image: ${{ env.GAR_LOCATION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ env.GAR_REPOSITORY }}/${{ env.BACKEND_IMAGE_NAME }}:latest
+            container_name: decision-celery-beat
+            command: celery -A tasks.celery_app beat --loglevel=info
+            environment:
+              - DATABASE_URL=postgresql://${DB_USER:-postgres}:${DB_PASSWORD}@postgres:5432/${DB_NAME:-decision}
+              - REDIS_URL=redis://redis:6379/0
+              - ENVIRONMENT=production
+              - SECRET_KEY=${SECRET_KEY}
+            volumes:
+              - /opt/decision-platform/uploads:/app/uploads
+              - /opt/decision-platform/models:/app/models
+              - /opt/decision-platform/logs:/app/logs
+            networks:
+              - decision-network
+            depends_on:
+              postgres:
+                condition: service_healthy
+              redis:
+                condition: service_healthy
+              backend:
+                condition: service_started
+            restart: unless-stopped
+
+          # Frontend
+          frontend:
+            image: ${{ env.GAR_LOCATION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ env.GAR_REPOSITORY }}/${{ env.FRONTEND_IMAGE_NAME }}:latest
+            container_name: decision-frontend
+            environment:
+              - NEXT_PUBLIC_API_URL=http://localhost:8000
+              - NODE_ENV=production
+            ports:
+              - "3000:3000"
+            networks:
+              - decision-network
+            depends_on:
+              - backend
+            restart: unless-stopped
+
+          # MinIO Object Storage
+          minio:
+            image: minio/minio:latest
+            container_name: decision-minio
+            command: server /data --console-address ":9001"
+            environment:
+              - MINIO_ROOT_USER=${MINIO_ACCESS_KEY}
+              - MINIO_ROOT_PASSWORD=${MINIO_SECRET_KEY}
+            volumes:
+              - minio_data:/data
+            ports:
+              - "9000:9000"
+              - "9001:9001"
+            networks:
+              - decision-network
+            healthcheck:
+              test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+              interval: 30s
+              timeout: 20s
+              retries: 3
+            restart: unless-stopped
+
+          # Nginx (Reverse Proxy)
+          nginx:
+            image: nginx:alpine
+            container_name: decision-nginx
+            volumes:
+              - ./docker/nginx.conf:/etc/nginx/nginx.conf:ro
+            ports:
+              - "80:80"
+              - "443:443"
+            networks:
+              - decision-network
+            depends_on:
+              - frontend
+              - backend
+            restart: unless-stopped
+
+        volumes:
+          postgres_data:
+          redis_data:
+          minio_data:
+
+        networks:
+          decision-network:
+            driver: bridge
+        EOF
+
+    - name: Create container start script
+      run: |
+        cat > start-containers.sh << 'EOF'
+        #!/bin/bash
+        set -e
+        
+        cd /opt/decision-platform
+        
+        # Determine if we need to use sudo for docker commands
+        USE_SUDO=""
+        if ! docker info >/dev/null 2>&1; then
+            echo "Using sudo for Docker commands due to permission issues..."
+            USE_SUDO="sudo"
+        fi
+        
+        # Ensure environment file exists
+        if [ ! -f "/opt/decision-platform/.env" ]; then
+            echo "❌ Environment file not found at /opt/decision-platform/.env"
+            exit 1
+        fi
+        
+        # Fix permissions for mounted volumes
+        echo "🔧 Setting proper permissions for mounted directories..."
+        sudo chown -R 1000:1000 /opt/decision-platform/logs
+        sudo chown -R 1000:1000 /opt/decision-platform/uploads
+        sudo chown -R 1000:1000 /opt/decision-platform/models
+        sudo chown -R 1000:1000 /opt/decision-platform/data
+        sudo chmod -R 755 /opt/decision-platform/logs
+        sudo chmod -R 755 /opt/decision-platform/uploads
+        sudo chmod -R 755 /opt/decision-platform/models
+        sudo chmod -R 755 /opt/decision-platform/data
+        
+        # Start services with docker-compose
+        echo "🚀 Starting Decision Platform services..."
+        if [ -n "$USE_SUDO" ]; then
+            sudo docker-compose -f docker-compose.prod.yml --env-file .env up -d
+        else
+            docker-compose -f docker-compose.prod.yml --env-file .env up -d
+        fi
+        
+        # Wait for services to be ready
+        echo "⏳ Waiting for services to be ready..."
+        sleep 30
+        
+        # Verify deployment
+        echo "🔍 Verifying deployment..."
+        if $USE_SUDO docker-compose -f docker-compose.prod.yml ps | grep -q "Up"; then
+          echo "✅ Services are running successfully!"
+          
+          # Display service status
+          echo "📊 Service Status:"
+          $USE_SUDO docker-compose -f docker-compose.prod.yml ps
+        else
+          echo "❌ Some services failed to start!"
+          $USE_SUDO docker-compose -f docker-compose.prod.yml logs --tail 10
+          exit 1
+        fi
+        
+        # Health checks
+        echo "🏥 Performing health checks..."
+        
+        # Check backend health
+        for i in {1..6}; do
+          if timeout 5 curl -f http://localhost:8000/health >/dev/null 2>&1; then
+            echo "✅ Backend is healthy"
+            break
+          fi
+          if [ $i -eq 6 ]; then
+            echo "⚠️ Backend health check failed"
+            $USE_SUDO docker-compose -f docker-compose.prod.yml logs backend --tail 10
+          fi
+          echo "⏳ Waiting for backend to be ready... ($i/6)"
+          sleep 10
+        done
+        
+        # Check frontend health
+        for i in {1..6}; do
+          if timeout 5 curl -f http://localhost:3000 >/dev/null 2>&1; then
+            echo "✅ Frontend is healthy"
+            break
+          fi
+          if [ $i -eq 6 ]; then
+            echo "⚠️ Frontend health check failed"
+            $USE_SUDO docker-compose -f docker-compose.prod.yml logs frontend --tail 10
+          fi
+          echo "⏳ Waiting for frontend to be ready... ($i/6)"
+          sleep 10
+        done
+        
+        echo "🎉 Decision Platform deployment completed successfully!"
+        EOF
+        
+        chmod +x start-containers.sh
+
+    - name: Deploy to VM via SSH
+      timeout-minutes: 20
+      run: |
+        # Add VM to known hosts with timeout
+        timeout 30 gcloud compute ssh ${{ env.VM_NAME }} \
+          --zone=${{ env.VM_ZONE }} \
+          --project=${{ secrets.GCP_PROJECT_ID }} \
+          --command="echo 'SSH connection test successful'" \
+          --ssh-flag="-o StrictHostKeyChecking=no -o ConnectTimeout=10"
+        
+        # Copy deployment script to VM
+        gcloud compute scp deploy.sh ${{ env.VM_NAME }}:~/deploy.sh \
+          --zone=${{ env.VM_ZONE }} \
+          --project=${{ secrets.GCP_PROJECT_ID }} \
+          --scp-flag="-o ConnectTimeout=10"
+        
+        # Copy environment file to VM
+        gcloud compute scp .env ${{ env.VM_NAME }}:~/decision-platform.env \
+          --zone=${{ env.VM_ZONE }} \
+          --project=${{ secrets.GCP_PROJECT_ID }} \
+          --scp-flag="-o ConnectTimeout=10"
+        
+        # Copy production docker-compose file to VM
+        gcloud compute scp docker-compose.prod.yml ${{ env.VM_NAME }}:~/docker-compose.prod.yml \
+          --zone=${{ env.VM_ZONE }} \
+          --project=${{ secrets.GCP_PROJECT_ID }} \
+          --scp-flag="-o ConnectTimeout=10"
+        
+        # Copy container start script to VM
+        gcloud compute scp start-containers.sh ${{ env.VM_NAME }}:~/start-containers.sh \
+          --zone=${{ env.VM_ZONE }} \
+          --project=${{ secrets.GCP_PROJECT_ID }} \
+          --scp-flag="-o ConnectTimeout=10"
+        
+        # Copy nginx config and init scripts
+        gcloud compute scp --recurse docker/ ${{ env.VM_NAME }}:~/docker/ \
+          --zone=${{ env.VM_ZONE }} \
+          --project=${{ secrets.GCP_PROJECT_ID }} \
+          --scp-flag="-o ConnectTimeout=10"
+        
+        gcloud compute scp --recurse scripts/ ${{ env.VM_NAME }}:~/scripts/ \
+          --zone=${{ env.VM_ZONE }} \
+          --project=${{ secrets.GCP_PROJECT_ID }} \
+          --scp-flag="-o ConnectTimeout=10"
+        
+        # Execute deployment on VM with timeout
+        timeout 900 gcloud compute ssh ${{ env.VM_NAME }} \
+          --zone=${{ env.VM_ZONE }} \
+          --project=${{ secrets.GCP_PROJECT_ID }} \
+          --ssh-flag="-o ConnectTimeout=10 -o ServerAliveInterval=30 -o ServerAliveCountMax=3" \
+          --command="
+            chmod +x ~/deploy.sh && 
+            ~/deploy.sh && 
+            sudo mv ~/decision-platform.env /opt/decision-platform/.env && 
+            sudo mv ~/docker-compose.prod.yml /opt/decision-platform/ &&
+            sudo cp -r ~/docker /opt/decision-platform/ &&
+            sudo cp -r ~/scripts /opt/decision-platform/ &&
+            sudo chown -R \$USER:\$USER /opt/decision-platform && 
+            chmod +x ~/start-containers.sh && 
+            cd /opt/decision-platform && 
+            ~/start-containers.sh
+          "
+
+    - name: Post-deployment verification
+      timeout-minutes: 5
+      run: |
+        # Get VM external IP
+        VM_IP=$(gcloud compute instances describe ${{ env.VM_NAME }} \
+          --zone=${{ env.VM_ZONE }} \
+          --project=${{ secrets.GCP_PROJECT_ID }} \
+          --format="value(networkInterfaces[0].accessConfigs[0].natIP)")
+        
+        echo "🌐 VM External IP: $VM_IP"
+        
+        # Verify firewall configuration
+        echo "🔥 Verifying firewall configuration..."
+        VM_TAGS=$(gcloud compute instances describe ${{ env.VM_NAME }} \
+          --zone=${{ env.VM_ZONE }} \
+          --project=${{ secrets.GCP_PROJECT_ID }} \
+          --format="value(tags.items[])")
+        echo "📋 VM Network Tags: $VM_TAGS"
+        
+        # External health checks
+        echo "🔍 External health checks..."
+        
+        # Check if frontend is accessible
+        for i in {1..5}; do
+          if timeout 10 curl -f "http://$VM_IP:3000" >/dev/null 2>&1; then
+            echo "✅ Frontend is accessible externally"
+            break
+          fi
+          if [ $i -eq 5 ]; then
+            echo "⚠️ Frontend external access failed"
+          fi
+          echo "⏳ Waiting for frontend external access... ($i/5)"
+          sleep 15
+        done
+        
+        # Check if backend API is accessible
+        for i in {1..5}; do
+          if timeout 10 curl -f "http://$VM_IP:8000/health" >/dev/null 2>&1; then
+            echo "✅ Backend API is accessible externally"
+            break
+          fi
+          if [ $i -eq 5 ]; then
+            echo "⚠️ Backend API external access failed"
+          fi
+          echo "⏳ Waiting for backend API external access... ($i/5)"
+          sleep 15
+        done
+
+    - name: Notify deployment status
+      if: always()
+      run: |
+        # Get VM external IP
+        VM_IP=$(gcloud compute instances describe ${{ env.VM_NAME }} \
+          --zone=${{ env.VM_ZONE }} \
+          --project=${{ secrets.GCP_PROJECT_ID }} \
+          --format="value(networkInterfaces[0].accessConfigs[0].natIP)")
+        
+        if [ "${{ job.status }}" = "success" ]; then
+          echo "🎉 Decision Platform deployment completed successfully!"
+          echo "🌐 Access URLs:"
+          echo "   - Frontend: http://$VM_IP:3000"
+          echo "   - Backend API: http://$VM_IP:8000"
+          echo "   - API Documentation: http://$VM_IP:8000/docs"
+          echo "   - MinIO Console: http://$VM_IP:9001"
+          echo "🏷️ VM Network Tags: decision-platform"
+        else
+          echo "❌ Decision Platform deployment failed!"
+          echo "🔍 Please check the logs and verify:"
+          echo "   - VM connectivity and status"
+          echo "   - Docker service health"
+          echo "   - Network configuration"
+          echo "   - Environment variables"
+        fi
+
+  # Job 5: Cleanup (optional)
+  cleanup:
+    name: Cleanup Old Resources
+    runs-on: ubuntu-latest
+    needs: [build-backend, build-frontend, deploy-to-vm]
+    if: success() && github.ref == 'refs/heads/main'
+    
+    steps:
+    - name: Authenticate to Google Cloud
+      uses: google-github-actions/auth@v2
+      with:
+        credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+    - name: Set up Cloud SDK
+      uses: google-github-actions/setup-gcloud@v2
+
+    - name: Cleanup old images
+      run: |
+        echo "🧹 Cleaning up old Docker images in Artifact Registry..."
+        
+        # Get old backend images (keep latest 5)
+        BACKEND_IMAGES_TO_DELETE=$(gcloud artifacts docker images list \
+          ${{ env.GAR_LOCATION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ env.GAR_REPOSITORY }}/${{ env.BACKEND_IMAGE_NAME }} \
+          --sort-by="~CREATE_TIME" --limit=999999 --format="value(IMAGE)" | tail -n +6)
+        
+        if [ -n "$BACKEND_IMAGES_TO_DELETE" ]; then
+          echo "Deleting old backend images..."
+          for image in $BACKEND_IMAGES_TO_DELETE; do
+            gcloud artifacts docker images delete "$image" --quiet --async || true
+          done
+        else
+          echo "No old backend images to delete"
+        fi
+        
+        # Get old frontend images (keep latest 5)
+        FRONTEND_IMAGES_TO_DELETE=$(gcloud artifacts docker images list \
+          ${{ env.GAR_LOCATION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ env.GAR_REPOSITORY }}/${{ env.FRONTEND_IMAGE_NAME }} \
+          --sort-by="~CREATE_TIME" --limit=999999 --format="value(IMAGE)" | tail -n +6)
+        
+        if [ -n "$FRONTEND_IMAGES_TO_DELETE" ]; then
+          echo "Deleting old frontend images..."
+          for image in $FRONTEND_IMAGES_TO_DELETE; do
+            gcloud artifacts docker images delete "$image" --quiet --async || true
+          done
+        else
+          echo "No old frontend images to delete"
+        fi
+        
+        echo "✅ Artifact Registry cleanup completed"

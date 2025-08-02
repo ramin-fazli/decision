@@ -221,7 +221,43 @@ docker-compose up -d postgres redis
 - **API**: http://localhost:8000
 - **API Documentation**: http://localhost:8000/docs
 
-## 📊 Performance
+## � Production Deployment
+
+### Google Cloud Platform (GCP)
+
+Deploy the Decision Platform to GCP using our automated GitHub Actions workflow:
+
+1. **Prerequisites Setup**
+   ```bash
+   # Validate your environment
+   chmod +x scripts/validate-environment.sh
+   ./scripts/validate-environment.sh
+   ```
+
+2. **Configure GitHub Secrets**
+   - Go to your repository Settings > Secrets and variables > Actions
+   - Add required secrets (see [deployment guide](docs/DEPLOYMENT_GCP.md))
+
+3. **Deploy via GitHub Actions**
+   - Push to `main` branch for automatic deployment
+   - Or manually trigger the "Deploy Decision Platform to GCP VM" workflow
+
+4. **VM Setup** (if needed)
+   ```bash
+   # Prepare your GCP VM
+   chmod +x scripts/setup-gcp-vm.sh
+   ./scripts/setup-gcp-vm.sh
+   ```
+
+📖 **Complete deployment guide**: [docs/DEPLOYMENT_GCP.md](docs/DEPLOYMENT_GCP.md)
+
+### Other Cloud Providers
+
+- **AWS**: Terraform configurations in `infrastructure/aws/`
+- **Azure**: Terraform configurations in `infrastructure/azure/`
+- **Kubernetes**: Helm charts in `infrastructure/k8s/`
+
+## �📊 Performance
 
 The platform is built for scale:
 - **API Response Time**: < 100ms for predictions
