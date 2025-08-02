@@ -410,6 +410,24 @@ jobs:
         
         echo "🚀 Starting deployment on VM..."
         
+        # === SYSTEM OPTIMIZATION FOR LARGE DOWNLOADS ===
+        echo "⚡ Optimizing system for large file downloads..."
+        
+        # Optimize network settings for large transfers
+        echo 'net.core.rmem_default = 262144' | sudo tee -a /etc/sysctl.conf
+        echo 'net.core.rmem_max = 16777216' | sudo tee -a /etc/sysctl.conf
+        echo 'net.core.wmem_default = 262144' | sudo tee -a /etc/sysctl.conf
+        echo 'net.core.wmem_max = 16777216' | sudo tee -a /etc/sysctl.conf
+        echo 'net.ipv4.tcp_rmem = 4096 65536 16777216' | sudo tee -a /etc/sysctl.conf
+        echo 'net.ipv4.tcp_wmem = 4096 65536 16777216' | sudo tee -a /etc/sysctl.conf
+        sudo sysctl -p >/dev/null 2>&1 || true
+        
+        # Increase file descriptor limits
+        echo '* soft nofile 65536' | sudo tee -a /etc/security/limits.conf
+        echo '* hard nofile 65536' | sudo tee -a /etc/security/limits.conf
+        echo 'root soft nofile 65536' | sudo tee -a /etc/security/limits.conf
+        echo 'root hard nofile 65536' | sudo tee -a /etc/security/limits.conf
+        
         # === DOCKER DISK SETUP ===
         echo "🔧 Configuring Docker storage..."
         
@@ -513,7 +531,7 @@ jobs:
         # === DOCKER CONFIGURATION ===
         echo "🐳 Configuring Docker for large images..."
         
-        # Configure Docker daemon for better space management
+        # Configure Docker daemon for better space management and large images
         sudo mkdir -p /etc/docker
         cat << 'DOCKER_CONFIG' | sudo tee /etc/docker/daemon.json
         {
@@ -525,7 +543,22 @@ jobs:
             "storage-driver": "overlay2",
             "storage-opts": [
                 "overlay2.override_kernel_check=true"
-            ]
+            ],
+            "max-concurrent-downloads": 6,
+            "max-concurrent-uploads": 5,
+            "max-download-attempts": 5,
+            "registry-mirrors": [],
+            "insecure-registries": [],
+            "debug": false,
+            "live-restore": true,
+            "userland-proxy": false,
+            "experimental": false,
+            "metrics-addr": "0.0.0.0:9323",
+            "default-network-opts": {
+                "bridge": {
+                    "com.docker.network.driver.mtu": "1500"
+                }
+            }
         }
         DOCKER_CONFIG
         
@@ -1032,7 +1065,7 @@ jobs:
         chmod +x start-containers.sh
 
     - name: Deploy to VM via SSH
-      timeout-minutes: 20
+      timeout-minutes: 30
       run: |
         # Add VM to known hosts with timeout
         timeout 30 gcloud compute ssh ${{ env.VM_NAME }} \
@@ -1077,11 +1110,11 @@ jobs:
           --project=${{ secrets.GCP_PROJECT_ID }} \
           --scp-flag="-o ConnectTimeout=10"
         
-        # Execute deployment on VM with timeout
-        timeout 900 gcloud compute ssh ${{ env.VM_NAME }} \
+        # Execute deployment on VM with optimized timeout for large images
+        timeout 1800 gcloud compute ssh ${{ env.VM_NAME }} \
           --zone=${{ env.VM_ZONE }} \
           --project=${{ secrets.GCP_PROJECT_ID }} \
-          --ssh-flag="-o ConnectTimeout=10 -o ServerAliveInterval=30 -o ServerAliveCountMax=3" \
+          --ssh-flag="-o ConnectTimeout=30 -o ServerAliveInterval=60 -o ServerAliveCountMax=30 -o TCPKeepAlive=yes" \
           --command="
             chmod +x ~/deploy.sh && 
             ~/deploy.sh && 
