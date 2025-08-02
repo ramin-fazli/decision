@@ -130,10 +130,10 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
               
               <div className="flex items-center space-x-3">
                 <div className="h-8 w-8 rounded-full bg-blue-600 flex items-center justify-center">
-                  <span className="text-sm font-medium text-white">RF</span>
+                  <span className="text-sm font-medium text-white">JS</span>
                 </div>
                 <div className="hidden md:block">
-                  <div className="text-sm font-medium text-gray-900">Ramin Fazli</div>
+                  <div className="text-sm font-medium text-gray-900">John Smith</div>
                   <div className="text-xs text-gray-500">Admin</div>
                 </div>
               </div>

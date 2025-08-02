@@ -16,18 +16,31 @@ RUN \
 # Rebuild the source code only when needed
 FROM base AS builder
 WORKDIR /app
+
+# Copy dependencies
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
-# Install all dependencies (including dev dependencies for building)
+# Install all dependencies for building
 RUN npm install
 
 # Set environment variables for build
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV NODE_ENV=production
 
-# Build the application
-RUN npm run build
+# Build the application with better error handling
+RUN npm run build 2>&1 | tee build.log && \
+    echo "Build completed. Checking for standalone output..." && \
+    ls -la .next/ && \
+    if [ ! -d ".next/standalone" ]; then \
+      echo "ERROR: Standalone output not found." && \
+      echo "Build log:" && \
+      cat build.log && \
+      exit 1; \
+    else \
+      echo "SUCCESS: Standalone output found." && \
+      ls -la .next/standalone/; \
+    fi
 
 # Production image, copy all the files and run next
 FROM base AS runner
@@ -39,13 +52,18 @@ ENV NEXT_TELEMETRY_DISABLED=1
 RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nextjs
 
-# Copy built application
-COPY --from=builder /app/public ./public
-COPY --from=builder /app/.next/standalone ./
-COPY --from=builder /app/.next/static ./.next/static
+# Create necessary directories
+RUN mkdir -p ./public ./.next/static
 
-# Set proper permissions
-RUN chown -R nextjs:nodejs /app
+# Copy public folder
+COPY --from=builder --chown=nextjs:nodejs /app/public ./public
+
+# Copy standalone server files
+COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
+
+# Copy static assets
+COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
+
 USER nextjs
 
 EXPOSE 3000

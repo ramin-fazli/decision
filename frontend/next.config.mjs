@@ -12,11 +12,6 @@ const nextConfig = {
     NEXT_PUBLIC_APP_VERSION: process.env.npm_package_version || '1.0.0',
   },
 
-  // Ensure CSS and styling work properly
-  experimental: {
-    optimizeCss: true,
-  },
-
   // Headers for API routes
   async headers() {
     return [
