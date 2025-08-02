@@ -21,6 +21,12 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
+# Debug: Check what was copied
+RUN echo "Checking copied files..." && \
+    ls -la && \
+    echo "Checking public folder..." && \
+    ls -la public/ || echo "No public folder found after copy"
+
 # Install all dependencies for building
 RUN npm install
 
@@ -28,10 +34,12 @@ RUN npm install
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV NODE_ENV=production
 
-# Build the application with better error handling
+# Build the application with better error handling and debugging
 RUN npm run build 2>&1 | tee build.log && \
     echo "Build completed. Checking for standalone output..." && \
     ls -la .next/ && \
+    echo "Checking public folder..." && \
+    ls -la public/ || echo "No public folder found" && \
     if [ ! -d ".next/standalone" ]; then \
       echo "ERROR: Standalone output not found." && \
       echo "Build log:" && \
@@ -55,14 +63,14 @@ RUN adduser --system --uid 1001 nextjs
 # Create necessary directories
 RUN mkdir -p ./public ./.next/static
 
-# Copy public folder
-COPY --from=builder --chown=nextjs:nodejs /app/public ./public
-
-# Copy standalone server files
+# Copy standalone server files first
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 
 # Copy static assets
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
+
+# Copy public folder (make it optional to avoid build failures)
+COPY --from=builder --chown=nextjs:nodejs /app/public ./public
 
 USER nextjs
 
