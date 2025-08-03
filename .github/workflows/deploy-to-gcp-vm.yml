@@ -482,7 +482,8 @@ jobs:
 
     - name: Create deployment script
       run: |
-        cat > deploy.sh << 'EOF'
+        # Create deployment script with variables substituted
+        cat > deploy.sh << EOF
         #!/bin/bash
         set -e
         
@@ -498,7 +499,7 @@ jobs:
         cd /opt/decision-platform
         
         # Ensure current user is in docker group and refresh group membership
-        sudo usermod -aG docker $USER
+        sudo usermod -aG docker \$USER
         sudo usermod -aG docker ubuntu 2>/dev/null || true
         
         # Authenticate Docker with GCP (use sudo if needed)
@@ -552,47 +553,47 @@ jobs:
         
         # Function to pull image with retry and progress
         pull_image_with_retry() {
-            local image=$1
+            local image=\$1
             local max_retries=3
             local retry_count=0
             
-            while [ $retry_count -lt $max_retries ]; do
-                echo "🔄 Attempting to pull $image (attempt $((retry_count + 1))/$max_retries)..."
+            while [ \$retry_count -lt \$max_retries ]; do
+                echo "🔄 Attempting to pull \$image (attempt \$((\$retry_count + 1))/\$max_retries)..."
                 
                 # Re-authenticate Docker before each attempt
                 echo "🔐 Re-authenticating Docker for pull attempt..."
                 if docker info >/dev/null 2>&1; then
                     gcloud auth configure-docker ${{ env.GAR_LOCATION }}-docker.pkg.dev --quiet
                     # Try pulling with extended timeout and progress
-                    if timeout 900 docker pull "$image"; then
-                        echo "✅ Successfully pulled $image"
+                    if timeout 900 docker pull "\$image"; then
+                        echo "✅ Successfully pulled \$image"
                         return 0
                     else
-                        echo "⚠️ Docker pull failed with exit code $?"
+                        echo "⚠️ Docker pull failed with exit code \$?"
                     fi
                 else
                     sudo -u root bash -c "gcloud auth configure-docker ${{ env.GAR_LOCATION }}-docker.pkg.dev --quiet"
-                    if timeout 900 sudo docker pull "$image"; then
-                        echo "✅ Successfully pulled $image"
+                    if timeout 900 sudo docker pull "\$image"; then
+                        echo "✅ Successfully pulled \$image"
                         return 0
                     else
-                        echo "⚠️ Docker pull failed with exit code $?"
+                        echo "⚠️ Docker pull failed with exit code \$?"
                     fi
                 fi
                 
-                retry_count=$((retry_count + 1))
-                if [ $retry_count -lt $max_retries ]; then
+                retry_count=\$((\$retry_count + 1))
+                if [ \$retry_count -lt \$max_retries ]; then
                     echo "⚠️ Pull failed, retrying in 15 seconds..."
                     sleep 15
                 fi
             done
             
-            echo "❌ Failed to pull $image after $max_retries attempts"
+            echo "❌ Failed to pull \$image after \$max_retries attempts"
             
             # Show detailed error information
             echo "🔍 Debugging information:"
-            echo "Docker version: $(docker --version 2>/dev/null || echo 'Docker not accessible')"
-            echo "gcloud version: $(gcloud --version 2>/dev/null | head -1 || echo 'gcloud not accessible')"
+            echo "Docker version: \$(docker --version 2>/dev/null || echo 'Docker not accessible')"
+            echo "gcloud version: \$(gcloud --version 2>/dev/null | head -1 || echo 'gcloud not accessible')"
             echo "Docker auth config:"
             cat ~/.docker/config.json 2>/dev/null || echo "No Docker config found"
             
@@ -601,21 +602,21 @@ jobs:
         
         # Pull backend image
         echo "🔄 Pulling backend image..."
-        pull_image_with_retry "$BACKEND_IMAGE"
-        BACKEND_STATUS=$?
+        pull_image_with_retry "\$BACKEND_IMAGE"
+        BACKEND_STATUS=\$?
         
         # Only proceed to frontend if backend succeeded
-        if [ $BACKEND_STATUS -eq 0 ]; then
+        if [ \$BACKEND_STATUS -eq 0 ]; then
             echo "🔄 Pulling frontend image..."
-            pull_image_with_retry "$FRONTEND_IMAGE"
-            FRONTEND_STATUS=$?
+            pull_image_with_retry "\$FRONTEND_IMAGE"
+            FRONTEND_STATUS=\$?
         else
             echo "❌ Skipping frontend pull due to backend failure"
             FRONTEND_STATUS=1
         fi
         
         # Check if both pulls succeeded
-        if [ $BACKEND_STATUS -ne 0 ] || [ $FRONTEND_STATUS -ne 0 ]; then
+        if [ \$BACKEND_STATUS -ne 0 ] || [ \$FRONTEND_STATUS -ne 0 ]; then
             echo "❌ Failed to pull one or more images. Deployment cannot continue."
             exit 1
         fi
@@ -625,35 +626,35 @@ jobs:
         # Stop existing containers if running (with fallback to sudo)
         echo "🛑 Stopping existing services..."
         if docker info >/dev/null 2>&1; then
-            $COMPOSE_CMD -f /opt/decision-platform/docker-compose.prod.yml down 2>/dev/null || true
+            \$COMPOSE_CMD -f /opt/decision-platform/docker-compose.prod.yml down 2>/dev/null || true
         else
-            sudo $COMPOSE_CMD -f /opt/decision-platform/docker-compose.prod.yml down 2>/dev/null || true
+            sudo \$COMPOSE_CMD -f /opt/decision-platform/docker-compose.prod.yml down 2>/dev/null || true
         fi
         
         # Clean up old images (keep last 3) 
         echo "🧹 Cleaning up old local images..."
         if docker info >/dev/null 2>&1; then
             # Clean up old backend images
-            OLD_BACKEND_IMAGES=$(docker images "${{ env.GAR_LOCATION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ env.GAR_REPOSITORY }}/${{ env.BACKEND_IMAGE_NAME }}" --format "{{.ID}} {{.CreatedAt}}" | sort -k2 -r | tail -n +4 | awk '{print $1}')
-            if [ -n "$OLD_BACKEND_IMAGES" ]; then
-                echo "$OLD_BACKEND_IMAGES" | xargs -r docker rmi -f || true
+            OLD_BACKEND_IMAGES=\$(docker images "${{ env.GAR_LOCATION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ env.GAR_REPOSITORY }}/${{ env.BACKEND_IMAGE_NAME }}" --format "{{.ID}} {{.CreatedAt}}" | sort -k2 -r | tail -n +4 | awk '{print \$1}')
+            if [ -n "\$OLD_BACKEND_IMAGES" ]; then
+                echo "\$OLD_BACKEND_IMAGES" | xargs -r docker rmi -f || true
             fi
             
             # Clean up old frontend images
-            OLD_FRONTEND_IMAGES=$(docker images "${{ env.GAR_LOCATION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ env.GAR_REPOSITORY }}/${{ env.FRONTEND_IMAGE_NAME }}" --format "{{.ID}} {{.CreatedAt}}" | sort -k2 -r | tail -n +4 | awk '{print $1}')
-            if [ -n "$OLD_FRONTEND_IMAGES" ]; then
-                echo "$OLD_FRONTEND_IMAGES" | xargs -r docker rmi -f || true
+            OLD_FRONTEND_IMAGES=\$(docker images "${{ env.GAR_LOCATION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ env.GAR_REPOSITORY }}/${{ env.FRONTEND_IMAGE_NAME }}" --format "{{.ID}} {{.CreatedAt}}" | sort -k2 -r | tail -n +4 | awk '{print \$1}')
+            if [ -n "\$OLD_FRONTEND_IMAGES" ]; then
+                echo "\$OLD_FRONTEND_IMAGES" | xargs -r docker rmi -f || true
             fi
         else
             # Same logic with sudo
-            OLD_BACKEND_IMAGES=$(sudo docker images "${{ env.GAR_LOCATION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ env.GAR_REPOSITORY }}/${{ env.BACKEND_IMAGE_NAME }}" --format "{{.ID}} {{.CreatedAt}}" | sort -k2 -r | tail -n +4 | awk '{print $1}')
-            if [ -n "$OLD_BACKEND_IMAGES" ]; then
-                echo "$OLD_BACKEND_IMAGES" | xargs -r sudo docker rmi -f || true
+            OLD_BACKEND_IMAGES=\$(sudo docker images "${{ env.GAR_LOCATION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ env.GAR_REPOSITORY }}/${{ env.BACKEND_IMAGE_NAME }}" --format "{{.ID}} {{.CreatedAt}}" | sort -k2 -r | tail -n +4 | awk '{print \$1}')
+            if [ -n "\$OLD_BACKEND_IMAGES" ]; then
+                echo "\$OLD_BACKEND_IMAGES" | xargs -r sudo docker rmi -f || true
             fi
             
-            OLD_FRONTEND_IMAGES=$(sudo docker images "${{ env.GAR_LOCATION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ env.GAR_REPOSITORY }}/${{ env.FRONTEND_IMAGE_NAME }}" --format "{{.ID}} {{.CreatedAt}}" | sort -k2 -r | tail -n +4 | awk '{print $1}')
-            if [ -n "$OLD_FRONTEND_IMAGES" ]; then
-                echo "$OLD_FRONTEND_IMAGES" | xargs -r sudo docker rmi -f || true
+            OLD_FRONTEND_IMAGES=\$(sudo docker images "${{ env.GAR_LOCATION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ env.GAR_REPOSITORY }}/${{ env.FRONTEND_IMAGE_NAME }}" --format "{{.ID}} {{.CreatedAt}}" | sort -k2 -r | tail -n +4 | awk '{print \$1}')
+            if [ -n "\$OLD_FRONTEND_IMAGES" ]; then
+                echo "\$OLD_FRONTEND_IMAGES" | xargs -r sudo docker rmi -f || true
             fi
         fi
         
