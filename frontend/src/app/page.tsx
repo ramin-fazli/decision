@@ -166,7 +166,7 @@ export default function HomePage() {
             
             <div className="mt-16 text-center">
               <Link 
-                href="/docs" 
+                href="#" 
                 className="inline-flex items-center text-blue-400 hover:text-blue-300 transition-colors"
               >
                 <Code className="h-4 w-4 mr-2" />
