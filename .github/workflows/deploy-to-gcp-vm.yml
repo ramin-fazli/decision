@@ -523,8 +523,8 @@ jobs:
                 if ! docker compose version &> /dev/null; then
                     echo "Installing Docker Compose plugin..."
                     # Download and install Docker Compose
-                    DOCKER_COMPOSE_VERSION=\$\$(curl -s https://api.github.com/repos/docker/compose/releases/latest | grep 'tag_name' | cut -d\" -f4)
-                    sudo curl -L "https://github.com/docker/compose/releases/download/\$\${DOCKER_COMPOSE_VERSION}/docker-compose-\$\$(uname -s)-\$\$(uname -m)" -o /usr/local/bin/docker-compose
+                    DOCKER_COMPOSE_VERSION=\$(curl -s https://api.github.com/repos/docker/compose/releases/latest | grep 'tag_name' | cut -d\" -f4)
+                    sudo curl -L "https://github.com/docker/compose/releases/download/\${DOCKER_COMPOSE_VERSION}/docker-compose-\$(uname -s)-\$(uname -m)" -o /usr/local/bin/docker-compose
                     sudo chmod +x /usr/local/bin/docker-compose
                     
                     # Create symlink for compatibility
@@ -537,10 +537,10 @@ jobs:
         
         # Verify Docker Compose installation
         if command -v docker-compose &> /dev/null; then
-            echo "✅ Docker Compose (standalone) version: \$\$(docker-compose --version)"
+            echo "✅ Docker Compose (standalone) version: \$(docker-compose --version)"
             COMPOSE_CMD="docker-compose"
         elif docker compose version &> /dev/null; then
-            echo "✅ Docker Compose (plugin) version: \$\$(docker compose version)"
+            echo "✅ Docker Compose (plugin) version: \$(docker compose version)"
             COMPOSE_CMD="docker compose"
         else
             echo "❌ Failed to install Docker Compose"
