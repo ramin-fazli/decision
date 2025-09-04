@@ -59,8 +59,10 @@ Decision is an API-first investment intelligence platform that provides:
 
 **Infrastructure**
 - Docker & Docker Compose for containerization
-- Kubernetes for orchestration
-- Terraform for Infrastructure as Code
+- **Enterprise Kubernetes** with multi-cloud support (AWS EKS, GCP GKE, Azure AKS)
+- **Advanced Terraform modules** for cloud-agnostic infrastructure
+- **GitOps workflows** with ArgoCD and ApplicationSets
+- **Production-ready security** with Pod Security Standards and network policies
 - GitHub Actions for CI/CD
 - PostgreSQL for primary data storage
 - MinIO for object storage
@@ -81,7 +83,18 @@ decision/
 │   ├── data/                  # Data ingestion and processing
 │   └── core/                  # Shared utilities and config
 ├── frontend/                  # Next.js React application
-├── infrastructure/            # Terraform and K8s configs
+├── infrastructure/            # Enterprise-grade infrastructure
+│   ├── terraform/            # Multi-cloud Terraform modules
+│   │   ├── modules/          # Reusable infrastructure components
+│   │   │   ├── networking/   # VPC, security groups, networking
+│   │   │   ├── compute/      # Kubernetes clusters (EKS/GKE/AKS)
+│   │   │   ├── database/     # PostgreSQL, Redis with encryption
+│   │   │   └── storage/      # Cloud storage with lifecycle policies
+│   │   └── environments/     # Environment-specific configurations
+│   └── kubernetes/           # Advanced K8s configurations
+│       ├── base/            # Core K8s resources (RBAC, security)
+│       ├── charts/          # Production-ready Helm charts
+│       └── gitops/          # ArgoCD applications and workflows
 ├── docker/                   # Docker configurations
 ├── .github/                  # CI/CD workflows
 └── docs/                     # Documentation
@@ -110,6 +123,9 @@ decision/
 ## 🛣️ Roadmap
 
 ### Phase 1: Foundation (Current)
+- [x] **Enterprise Infrastructure** - Multi-cloud Terraform modules with Kubernetes
+- [x] **Advanced Security** - Pod Security Standards, network policies, encryption
+- [x] **GitOps Workflows** - ArgoCD with progressive delivery capabilities
 - [ ] Core API infrastructure
 - [ ] Basic ML models implementation
 - [ ] Frontend dashboard MVP
@@ -155,7 +171,7 @@ decision/
 - **Docker Desktop** - [Download from docker.com](https://docker.com)
 - **Git** - [Download from git-scm.com](https://git-scm.com)
 
-### Setup Instructions
+### Development Environment Setup
 
 #### Option 1: Universal Setup (Recommended)
 ```bash
@@ -182,6 +198,42 @@ scripts\setup.bat
 #### Option 3: Docker Only (Simplest)
 ```bash
 # Clone and start with Docker
+git clone https://github.com/ramin-fazli/decision.git
+cd decision
+docker-compose up -d
+```
+
+### Production Deployment
+
+#### Infrastructure Prerequisites
+- **Terraform >= 1.6** - [Download from terraform.io](https://terraform.io)
+- **kubectl** - [Install guide](https://kubernetes.io/docs/tasks/tools/)
+- **Helm >= 3.0** - [Install guide](https://helm.sh/docs/intro/install/)
+- **Cloud CLI** - AWS CLI, gcloud, or Azure CLI
+
+#### Deploy Infrastructure
+```bash
+cd infrastructure/terraform
+
+# Initialize Terraform
+terraform init
+
+# Plan deployment (choose your cloud)
+terraform plan -var-file="environments/production/terraform.tfvars"
+
+# Apply infrastructure
+terraform apply -var-file="environments/production/terraform.tfvars"
+```
+
+#### Deploy Applications via GitOps
+```bash
+# ArgoCD is automatically installed and configured
+# Applications will auto-deploy via GitOps workflows
+
+# Manual deployment (if needed)
+cd infrastructure/kubernetes/helm-charts
+helm install decision-ai ./decision-ai-platform -f values-production.yaml
+```
 git clone https://github.com/ramin-fazli/decision.git
 cd decision
 docker-compose up -d
@@ -221,7 +273,36 @@ docker-compose up -d postgres redis
 - **API**: http://localhost:8000
 - **API Documentation**: http://localhost:8000/docs
 
-## � Production Deployment
+## 🎯 Enterprise Infrastructure
+
+The Decision platform leverages enterprise-grade infrastructure with advanced cloud-native technologies:
+
+### Infrastructure Features
+- **Multi-Cloud Support**: Deploy on AWS, GCP, or Azure with unified Terraform modules
+- **Auto-Scaling Kubernetes**: Production-ready clusters with horizontal pod autoscaling
+- **GitOps Workflows**: Automated deployments with ArgoCD and progressive delivery
+- **Zero-Trust Security**: Pod Security Standards, network policies, and encryption at rest
+- **Observability Stack**: Integrated Prometheus, Grafana, and distributed tracing
+- **Service Mesh**: Optional Istio integration for advanced traffic management
+
+### Infrastructure Components
+```
+infrastructure/
+├── terraform/                 # Multi-cloud infrastructure modules
+│   ├── modules/
+│   │   ├── networking/        # VPC, subnets, security groups
+│   │   ├── compute/          # Kubernetes clusters (EKS/GKE/AKS)
+│   │   ├── database/         # Managed databases with encryption
+│   │   └── storage/          # Object storage with lifecycle policies
+│   └── environments/         # Environment-specific configurations
+├── kubernetes/
+│   ├── base/                 # Core K8s configurations
+│   ├── gitops/              # ArgoCD applications and workflows
+│   └── helm-charts/         # Production Helm charts
+└── monitoring/              # Observability stack configurations
+```
+
+## 🏭 Production Deployment
 
 ### Google Cloud Platform (GCP)
 
@@ -248,14 +329,6 @@ Deploy the Decision Platform to GCP using our automated GitHub Actions workflow:
    chmod +x scripts/setup-gcp-vm.sh
    ./scripts/setup-gcp-vm.sh
    ```
-
-📖 **Complete deployment guide**: [docs/DEPLOYMENT_GCP.md](docs/DEPLOYMENT_GCP.md)
-
-### Other Cloud Providers
-
-- **AWS**: Terraform configurations in `infrastructure/aws/`
-- **Azure**: Terraform configurations in `infrastructure/azure/`
-- **Kubernetes**: Helm charts in `infrastructure/k8s/`
 
 ## �📊 Performance
 

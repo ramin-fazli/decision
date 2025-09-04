@@ -1,0 +1,304 @@
+# Network Policies for Decision Platform
+# Backend Network Policy - Restrict access to backend services
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: decision-backend-netpol
+  namespace: decision
+  labels:
+    app.kubernetes.io/name: decision-backend
+    app.kubernetes.io/part-of: decision-platform
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: decision-backend
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  # Allow ingress from frontend
+  - from:
+    - podSelector:
+        matchLabels:
+          app.kubernetes.io/name: decision-frontend
+    ports:
+    - protocol: TCP
+      port: 8000
+  # Allow ingress from ML workers
+  - from:
+    - podSelector:
+        matchLabels:
+          app.kubernetes.io/name: decision-ml-worker
+    ports:
+    - protocol: TCP
+      port: 8000
+  # Allow ingress from ingress controller
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: ingress-nginx
+    ports:
+    - protocol: TCP
+      port: 8000
+  # Allow monitoring scraping
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: monitoring
+    ports:
+    - protocol: TCP
+      port: 8000
+    - protocol: TCP
+      port: 9090
+  egress:
+  # Allow DNS
+  - to: []
+    ports:
+    - protocol: UDP
+      port: 53
+    - protocol: TCP
+      port: 53
+  # Allow database access
+  - to: []
+    ports:
+    - protocol: TCP
+      port: 5432
+    - protocol: TCP
+      port: 6379
+  # Allow external API calls (HTTPS)
+  - to: []
+    ports:
+    - protocol: TCP
+      port: 443
+  # Allow Kubernetes API
+  - to: []
+    ports:
+    - protocol: TCP
+      port: 6443
+---
+# Frontend Network Policy - Allow ingress traffic
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: decision-frontend-netpol
+  namespace: decision
+  labels:
+    app.kubernetes.io/name: decision-frontend
+    app.kubernetes.io/part-of: decision-platform
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: decision-frontend
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  # Allow all ingress (public facing)
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: ingress-nginx
+    ports:
+    - protocol: TCP
+      port: 3000
+  # Allow monitoring scraping
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: monitoring
+    ports:
+    - protocol: TCP
+      port: 3000
+    - protocol: TCP
+      port: 9090
+  egress:
+  # Allow DNS
+  - to: []
+    ports:
+    - protocol: UDP
+      port: 53
+    - protocol: TCP
+      port: 53
+  # Allow backend communication
+  - to:
+    - podSelector:
+        matchLabels:
+          app.kubernetes.io/name: decision-backend
+    ports:
+    - protocol: TCP
+      port: 8000
+  # Allow CDN/external resources (HTTPS)
+  - to: []
+    ports:
+    - protocol: TCP
+      port: 443
+    - protocol: TCP
+      port: 80
+---
+# ML Worker Network Policy - Restricted access
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: decision-ml-worker-netpol
+  namespace: decision
+  labels:
+    app.kubernetes.io/name: decision-ml-worker
+    app.kubernetes.io/part-of: decision-platform
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: decision-ml-worker
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  # Allow ingress from backend for job scheduling
+  - from:
+    - podSelector:
+        matchLabels:
+          app.kubernetes.io/name: decision-backend
+    ports:
+    - protocol: TCP
+      port: 8080
+  # Allow monitoring scraping
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: monitoring
+    ports:
+    - protocol: TCP
+      port: 9090
+  egress:
+  # Allow DNS
+  - to: []
+    ports:
+    - protocol: UDP
+      port: 53
+    - protocol: TCP
+      port: 53
+  # Allow backend communication
+  - to:
+    - podSelector:
+        matchLabels:
+          app.kubernetes.io/name: decision-backend
+    ports:
+    - protocol: TCP
+      port: 8000
+  # Allow database access
+  - to: []
+    ports:
+    - protocol: TCP
+      port: 5432
+    - protocol: TCP
+      port: 6379
+  # Allow external ML APIs (HTTPS)
+  - to: []
+    ports:
+    - protocol: TCP
+      port: 443
+  # Allow Kubernetes API for job management
+  - to: []
+    ports:
+    - protocol: TCP
+      port: 6443
+---
+# Default Deny All Policy for tight security
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-all
+  namespace: decision
+  labels:
+    app.kubernetes.io/name: default-deny
+    app.kubernetes.io/part-of: decision-platform
+spec:
+  podSelector: {}
+  policyTypes:
+  - Ingress
+  - Egress
+---
+# Allow monitoring namespace to scrape metrics
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-monitoring-scraping
+  namespace: decision
+  labels:
+    app.kubernetes.io/name: monitoring-access
+    app.kubernetes.io/part-of: decision-platform
+spec:
+  podSelector:
+    matchExpressions:
+    - key: app.kubernetes.io/name
+      operator: In
+      values: ["decision-backend", "decision-frontend", "decision-ml-worker"]
+  policyTypes:
+  - Ingress
+  ingress:
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: monitoring
+    ports:
+    - protocol: TCP
+      port: 9090
+---
+# Monitoring namespace network policy
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: monitoring-netpol
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/name: monitoring
+    app.kubernetes.io/part-of: decision-platform
+spec:
+  podSelector: {}
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  # Allow scraping from anywhere in cluster
+  - from: []
+    ports:
+    - protocol: TCP
+      port: 9090
+    - protocol: TCP
+      port: 3000
+  # Allow ingress controller access to Grafana
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: ingress-nginx
+    ports:
+    - protocol: TCP
+      port: 3000
+  egress:
+  # Allow DNS
+  - to: []
+    ports:
+    - protocol: UDP
+      port: 53
+    - protocol: TCP
+      port: 53
+  # Allow scraping all namespaces
+  - to: []
+    ports:
+    - protocol: TCP
+      port: 9090
+    - protocol: TCP
+      port: 8000
+    - protocol: TCP
+      port: 3000
+    - protocol: TCP
+      port: 8080
+  # Allow external alerting (HTTPS)
+  - to: []
+    ports:
+    - protocol: TCP
+      port: 443
+  # Allow Kubernetes API access
+  - to: []
+    ports:
+    - protocol: TCP
+      port: 6443

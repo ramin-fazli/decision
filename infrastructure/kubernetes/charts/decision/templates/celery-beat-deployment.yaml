@@ -1,0 +1,71 @@
+{{- if .Values.celeryBeat.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "decision.fullname" . }}-celery-beat
+  labels:
+    {{- $component := "celery-beat" }}
+    {{- include "decision.componentLabels" (set . "component" $component) | nindent 4 }}
+spec:
+  replicas: {{ .Values.celeryBeat.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "decision.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: celery-beat
+  strategy:
+    type: Recreate  # Only one beat scheduler should run
+  template:
+    metadata:
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        checksum/secret: {{ include (print $.Template.BasePath "/secret.yaml") . | sha256sum }}
+        {{- with .Values.celeryBeat.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      labels:
+        {{- include "decision.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: celery-beat
+    spec:
+      {{- include "decision.imagePullSecrets" . | nindent 6 }}
+      serviceAccountName: {{ include "decision.serviceAccountName" . }}
+      {{- include "decision.podSecurityContext" . | nindent 6 }}
+      containers:
+        - name: celery-beat
+          {{- include "decision.securityContext" . | nindent 10 }}
+          image: {{ include "decision.image" (dict "repository" .Values.celeryBeat.image.repository "tag" .Values.celeryBeat.image.tag "Values" .Values) }}
+          imagePullPolicy: {{ .Values.celeryBeat.image.pullPolicy }}
+          {{- if .Values.celeryBeat.command }}
+          command:
+            {{- toYaml .Values.celeryBeat.command | nindent 12 }}
+          {{- end }}
+          {{- include "decision.resources" .Values.celeryBeat | nindent 10 }}
+          env:
+            {{- include "decision.commonEnv" . | nindent 12 }}
+            - name: CELERY_BROKER_URL
+              value: {{ include "decision.redisUrl" . | quote }}
+            - name: CELERY_RESULT_BACKEND
+              value: {{ include "decision.redisUrl" . | quote }}
+          volumeMounts:
+            - name: celery-beat-schedule
+              mountPath: /app/celerybeat-schedule
+            - name: tmp
+              mountPath: /tmp
+          livenessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - "ps aux | grep '[c]elery.*beat' | wc -l | grep -q '^1$'"
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            timeoutSeconds: 10
+            failureThreshold: 3
+      volumes:
+        - name: celery-beat-schedule
+          emptyDir: {}
+        - name: tmp
+          emptyDir: {}
+      {{- include "decision.nodeSelection" .Values.celeryBeat | nindent 6 }}
+      restartPolicy: Always
+      terminationGracePeriodSeconds: 60
+{{- end }}

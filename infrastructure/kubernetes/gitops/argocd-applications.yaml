@@ -1,0 +1,312 @@
+# ArgoCD Application Configuration for Decision Platform
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: decision-platform-dev
+  namespace: argo
+  labels:
+    app.kubernetes.io/name: decision-platform
+    app.kubernetes.io/part-of: decision-platform
+    app.kubernetes.io/component: gitops
+    environment: development
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: decision-platform
+  source:
+    repoURL: https://github.com/your-org/decision
+    targetRevision: HEAD
+    path: infrastructure/kubernetes/environments/dev
+    helm:
+      valueFiles:
+        - values.yaml
+        - values-dev.yaml
+      parameters:
+        - name: image.tag
+          value: "dev-latest"
+        - name: replicaCount.backend
+          value: "2"
+        - name: replicaCount.frontend
+          value: "2"
+        - name: resources.backend.requests.cpu
+          value: "100m"
+        - name: resources.backend.requests.memory
+          value: "256Mi"
+        - name: environment
+          value: "development"
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: decision
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+      allowEmpty: false
+    syncOptions:
+      - CreateNamespace=true
+      - PrunePropagationPolicy=foreground
+      - PruneLast=true
+      - RespectIgnoreDifferences=true
+      - ApplyOutOfSyncOnly=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 3m
+  revisionHistoryLimit: 10
+  ignoreDifferences:
+    - group: apps
+      kind: Deployment
+      jsonPointers:
+        - /spec/replicas
+    - group: ""
+      kind: ConfigMap
+      jsonPointers:
+        - /data
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: decision-platform-staging
+  namespace: argo
+  labels:
+    app.kubernetes.io/name: decision-platform
+    app.kubernetes.io/part-of: decision-platform
+    app.kubernetes.io/component: gitops
+    environment: staging
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: decision-platform
+  source:
+    repoURL: https://github.com/your-org/decision
+    targetRevision: main
+    path: infrastructure/kubernetes/environments/staging
+    helm:
+      valueFiles:
+        - values.yaml
+        - values-staging.yaml
+      parameters:
+        - name: image.tag
+          value: "staging-latest"
+        - name: replicaCount.backend
+          value: "3"
+        - name: replicaCount.frontend
+          value: "3"
+        - name: resources.backend.requests.cpu
+          value: "200m"
+        - name: resources.backend.requests.memory
+          value: "512Mi"
+        - name: environment
+          value: "staging"
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: decision
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+      allowEmpty: false
+    syncOptions:
+      - CreateNamespace=true
+      - PrunePropagationPolicy=foreground
+      - PruneLast=true
+      - RespectIgnoreDifferences=true
+    retry:
+      limit: 3
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 3m
+  revisionHistoryLimit: 10
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: decision-platform-prod
+  namespace: argo
+  labels:
+    app.kubernetes.io/name: decision-platform
+    app.kubernetes.io/part-of: decision-platform
+    app.kubernetes.io/component: gitops
+    environment: production
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: decision-platform
+  source:
+    repoURL: https://github.com/your-org/decision
+    targetRevision: v1.0.0  # Use specific tags for production
+    path: infrastructure/kubernetes/environments/prod
+    helm:
+      valueFiles:
+        - values.yaml
+        - values-prod.yaml
+      parameters:
+        - name: image.tag
+          value: "v1.0.0"
+        - name: replicaCount.backend
+          value: "5"
+        - name: replicaCount.frontend
+          value: "5"
+        - name: replicaCount.mlWorker
+          value: "3"
+        - name: resources.backend.requests.cpu
+          value: "500m"
+        - name: resources.backend.requests.memory
+          value: "1Gi"
+        - name: environment
+          value: "production"
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: decision
+  syncPolicy:
+    # Manual sync for production
+    syncOptions:
+      - CreateNamespace=true
+      - PrunePropagationPolicy=foreground
+      - PruneLast=true
+    retry:
+      limit: 2
+      backoff:
+        duration: 10s
+        factor: 2
+        maxDuration: 5m
+  revisionHistoryLimit: 20
+---
+# ArgoCD Project for Decision Platform
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: decision-platform
+  namespace: argo
+  labels:
+    app.kubernetes.io/name: decision-project
+    app.kubernetes.io/part-of: decision-platform
+spec:
+  description: Decision Platform GitOps Project
+  sourceRepos:
+    - 'https://github.com/your-org/decision'
+    - 'https://charts.bitnami.com/bitnami'
+    - 'https://kubernetes.github.io/ingress-nginx'
+    - 'https://prometheus-community.github.io/helm-charts'
+    - 'https://grafana.github.io/helm-charts'
+  destinations:
+    - namespace: 'decision*'
+      server: https://kubernetes.default.svc
+    - namespace: 'monitoring'
+      server: https://kubernetes.default.svc
+    - namespace: 'ingress-nginx'
+      server: https://kubernetes.default.svc
+    - namespace: 'cert-manager'
+      server: https://kubernetes.default.svc
+    - namespace: 'external-secrets'
+      server: https://kubernetes.default.svc
+  clusterResourceWhitelist:
+    - group: ''
+      kind: Namespace
+    - group: 'rbac.authorization.k8s.io'
+      kind: ClusterRole
+    - group: 'rbac.authorization.k8s.io'
+      kind: ClusterRoleBinding
+    - group: 'networking.k8s.io'
+      kind: NetworkPolicy
+    - group: 'policy'
+      kind: PodSecurityPolicy
+    - group: 'apiextensions.k8s.io'
+      kind: CustomResourceDefinition
+    - group: 'admissionregistration.k8s.io'
+      kind: MutatingAdmissionWebhook
+    - group: 'admissionregistration.k8s.io'
+      kind: ValidatingAdmissionWebhook
+  namespaceResourceWhitelist:
+    - group: ''
+      kind: ConfigMap
+    - group: ''
+      kind: Secret
+    - group: ''
+      kind: Service
+    - group: ''
+      kind: ServiceAccount
+    - group: ''
+      kind: PersistentVolumeClaim
+    - group: 'apps'
+      kind: Deployment
+    - group: 'apps'
+      kind: StatefulSet
+    - group: 'apps'
+      kind: DaemonSet
+    - group: 'batch'
+      kind: Job
+    - group: 'batch'
+      kind: CronJob
+    - group: 'networking.k8s.io'
+      kind: Ingress
+    - group: 'policy'
+      kind: PodDisruptionBudget
+    - group: 'autoscaling'
+      kind: HorizontalPodAutoscaler
+    - group: 'monitoring.coreos.com'
+      kind: ServiceMonitor
+    - group: 'monitoring.coreos.com'
+      kind: PrometheusRule
+  roles:
+    - name: decision-admin
+      description: Decision Platform Administrator
+      policies:
+        - p, proj:decision-platform:decision-admin, applications, *, decision-platform/*, allow
+        - p, proj:decision-platform:decision-admin, repositories, *, *, allow
+        - p, proj:decision-platform:decision-admin, clusters, *, *, allow
+      groups:
+        - decision-platform:admin
+    - name: decision-developer
+      description: Decision Platform Developer
+      policies:
+        - p, proj:decision-platform:decision-developer, applications, get, decision-platform/*, allow
+        - p, proj:decision-platform:decision-developer, applications, sync, decision-platform/decision-platform-dev, allow
+        - p, proj:decision-platform:decision-developer, applications, sync, decision-platform/decision-platform-staging, allow
+        - p, proj:decision-platform:decision-developer, repositories, get, *, allow
+      groups:
+        - decision-platform:developer
+    - name: decision-viewer
+      description: Decision Platform Viewer
+      policies:
+        - p, proj:decision-platform:decision-viewer, applications, get, decision-platform/*, allow
+        - p, proj:decision-platform:decision-viewer, repositories, get, *, allow
+      groups:
+        - decision-platform:viewer
+---
+# Infrastructure Applications (ArgoCD App of Apps pattern)
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: decision-infrastructure
+  namespace: argo
+  labels:
+    app.kubernetes.io/name: decision-infrastructure
+    app.kubernetes.io/part-of: decision-platform
+    app.kubernetes.io/component: infrastructure
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+spec:
+  project: decision-platform
+  source:
+    repoURL: https://github.com/your-org/decision
+    targetRevision: HEAD
+    path: infrastructure/kubernetes/infrastructure
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argo
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

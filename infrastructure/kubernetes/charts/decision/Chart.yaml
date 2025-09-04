@@ -1,0 +1,42 @@
+apiVersion: v2
+name: decision
+description: A comprehensive Helm chart for the Decision Platform ML application
+type: application
+version: 0.1.0
+appVersion: "1.0.0"
+keywords:
+  - machine-learning
+  - decision-platform
+  - fastapi
+  - nextjs
+  - ml
+home: https://github.com/ramin-fazli/decision
+sources:
+  - https://github.com/ramin-fazli/decision
+maintainers:
+  - name: Decision Platform Team
+    email: team@decision.is
+dependencies:
+  - name: postgresql
+    version: "12.x.x"
+    repository: "https://charts.bitnami.com/bitnami"
+    condition: postgresql.enabled
+  - name: redis
+    version: "18.x.x"
+    repository: "https://charts.bitnami.com/bitnami"
+    condition: redis.enabled
+  - name: minio
+    version: "12.x.x"
+    repository: "https://charts.bitnami.com/bitnami"
+    condition: minio.enabled
+  - name: prometheus
+    version: "25.x.x"
+    repository: "https://prometheus-community.github.io/helm-charts"
+    condition: monitoring.prometheus.enabled
+  - name: grafana
+    version: "7.x.x"
+    repository: "https://grafana.github.io/helm-charts"
+    condition: monitoring.grafana.enabled
+annotations:
+  category: MachineLearning
+  licenses: MIT

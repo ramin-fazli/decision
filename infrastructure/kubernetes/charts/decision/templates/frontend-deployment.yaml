@@ -1,0 +1,57 @@
+{{- if .Values.frontend.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "decision.fullname" . }}-frontend
+  labels:
+    {{- $component := "frontend" }}
+    {{- include "decision.componentLabels" (set . "component" $component) | nindent 4 }}
+    {{- include "decision.monitoringLabels" . | nindent 4 }}
+    {{- include "decision.istioLabels" . | nindent 4 }}
+spec:
+  {{- if not .Values.autoscaling.enabled }}
+  replicas: {{ .Values.frontend.replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "decision.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: frontend
+  template:
+    metadata:
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        {{- with .Values.frontend.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      labels:
+        {{- include "decision.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: frontend
+        {{- include "decision.monitoringLabels" . | nindent 8 }}
+        {{- include "decision.istioLabels" . | nindent 8 }}
+    spec:
+      {{- include "decision.imagePullSecrets" . | nindent 6 }}
+      serviceAccountName: {{ include "decision.serviceAccountName" . }}
+      {{- include "decision.podSecurityContext" . | nindent 6 }}
+      containers:
+        - name: frontend
+          {{- include "decision.securityContext" . | nindent 10 }}
+          image: {{ include "decision.image" (dict "repository" .Values.frontend.image.repository "tag" .Values.frontend.image.tag "Values" .Values) }}
+          imagePullPolicy: {{ .Values.frontend.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.frontend.service.targetPort }}
+              protocol: TCP
+          {{- include "decision.healthChecks" .Values.frontend | nindent 10 }}
+          {{- include "decision.resources" .Values.frontend | nindent 10 }}
+          env:
+            {{- include "decision.commonEnv" . | nindent 12 }}
+            {{- range $key, $value := .Values.frontend.env }}
+            - name: {{ $key }}
+              value: {{ $value | quote }}
+            {{- end }}
+          {{- include "decision.volumeMounts" .Values.frontend | nindent 10 }}
+      {{- include "decision.volumes" .Values.frontend | nindent 6 }}
+      {{- include "decision.nodeSelection" .Values.frontend | nindent 6 }}
+      restartPolicy: Always
+      terminationGracePeriodSeconds: 30
+{{- end }}

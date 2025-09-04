@@ -1,0 +1,96 @@
+{{- if .Values.mlWorker.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "decision.fullname" . }}-ml-worker
+  labels:
+    {{- $component := "ml-worker" }}
+    {{- include "decision.componentLabels" (set . "component" $component) | nindent 4 }}
+    {{- include "decision.monitoringLabels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.mlWorker.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "decision.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: ml-worker
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+      maxSurge: 0
+  template:
+    metadata:
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        checksum/secret: {{ include (print $.Template.BasePath "/secret.yaml") . | sha256sum }}
+        {{- with .Values.mlWorker.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      labels:
+        {{- include "decision.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: ml-worker
+        {{- include "decision.monitoringLabels" . | nindent 8 }}
+    spec:
+      {{- include "decision.imagePullSecrets" . | nindent 6 }}
+      serviceAccountName: {{ include "decision.serviceAccountName" . }}
+      {{- include "decision.podSecurityContext" . | nindent 6 }}
+      containers:
+        - name: ml-worker
+          {{- include "decision.securityContext" . | nindent 10 }}
+          image: {{ include "decision.image" (dict "repository" .Values.mlWorker.image.repository "tag" .Values.mlWorker.image.tag "Values" .Values) }}
+          imagePullPolicy: {{ .Values.mlWorker.image.pullPolicy }}
+          {{- if .Values.mlWorker.command }}
+          command:
+            {{- toYaml .Values.mlWorker.command | nindent 12 }}
+          {{- end }}
+          ports:
+            - name: metrics
+              containerPort: 9090
+              protocol: TCP
+          {{- include "decision.resources" .Values.mlWorker | nindent 10 }}
+          env:
+            {{- include "decision.commonEnv" . | nindent 12 }}
+            {{- range $key, $value := .Values.mlWorker.env }}
+            - name: {{ $key }}
+              value: {{ $value | quote }}
+            {{- end }}
+            - name: CELERY_BROKER_URL
+              value: {{ include "decision.redisUrl" . | quote }}
+            - name: CELERY_RESULT_BACKEND
+              value: {{ include "decision.redisUrl" . | quote }}
+            - name: PROMETHEUS_MULTIPROC_DIR
+              value: "/tmp/prometheus"
+          {{- include "decision.volumeMounts" .Values.mlWorker | nindent 10 }}
+            - name: prometheus-metrics
+              mountPath: /tmp/prometheus
+          livenessProbe:
+            exec:
+              command:
+                - celery
+                - -A
+                - app.main
+                - inspect
+                - ping
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            timeoutSeconds: 10
+            failureThreshold: 3
+          readinessProbe:
+            exec:
+              command:
+                - celery
+                - -A
+                - app.main
+                - inspect
+                - active
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+      {{- include "decision.volumes" .Values.mlWorker | nindent 6 }}
+        - name: prometheus-metrics
+          emptyDir: {}
+      {{- include "decision.nodeSelection" .Values.mlWorker | nindent 6 }}
+      restartPolicy: Always
+      terminationGracePeriodSeconds: 120
+{{- end }}

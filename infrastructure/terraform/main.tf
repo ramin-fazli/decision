@@ -1,54 +1,70 @@
-# Main Terraform configuration for Decision Platform
-# Cloud-agnostic setup with support for AWS, GCP, and Azure
+# Enhanced Terraform configuration for Decision Platform
+# Cloud-agnostic setup with advanced patterns and best practices
 
 terraform {
-  required_version = ">= 1.0"
-  
+  required_version = ">= 1.6"
+
   required_providers {
     aws = {
       source  = "hashicorp/aws"
-      version = "~> 5.0"
+      version = "~> 5.30"
     }
     google = {
       source  = "hashicorp/google"
-      version = "~> 5.0"
+      version = "~> 5.10"
     }
     azurerm = {
       source  = "hashicorp/azurerm"
-      version = "~> 3.0"
+      version = "~> 3.80"
     }
     kubernetes = {
       source  = "hashicorp/kubernetes"
-      version = "~> 2.0"
+      version = "~> 2.25"
     }
     helm = {
       source  = "hashicorp/helm"
-      version = "~> 2.0"
+      version = "~> 2.12"
+    }
+    random = {
+      source  = "hashicorp/random"
+      version = "~> 3.6"
+    }
+    tls = {
+      source  = "hashicorp/tls"
+      version = "~> 4.0"
     }
   }
 
-  # Backend configuration for state management
+  # Enhanced backend configuration with remote state management
   backend "s3" {
-    bucket         = "decision-terraform-state"
+    bucket         = "decision-terraform-state-${var.environment}"
     key            = "infrastructure/terraform.tfstate"
     region         = "us-east-1"
     encrypt        = true
-    dynamodb_table = "decision-terraform-locks"
+    dynamodb_table = "decision-terraform-locks-${var.environment}"
+
+    # Workspace separation
+    workspace_key_prefix = "env"
   }
 }
 
-# Variables
+# Enhanced Variables with comprehensive configuration options
 variable "environment" {
   description = "Environment name (dev, staging, production)"
   type        = string
   default     = "dev"
+
+  validation {
+    condition     = contains(["dev", "staging", "production"], var.environment)
+    error_message = "Environment must be one of: dev, staging, production."
+  }
 }
 
 variable "cloud_provider" {
   description = "Cloud provider to use (aws, gcp, azure)"
   type        = string
   default     = "aws"
-  
+
   validation {
     condition     = contains(["aws", "gcp", "azure"], var.cloud_provider)
     error_message = "Cloud provider must be one of: aws, gcp, azure."
@@ -67,16 +83,26 @@ variable "region" {
   default     = "us-east-1"
 }
 
+variable "availability_zones" {
+  description = "List of availability zones"
+  type        = list(string)
+  default     = []
+}
+
 variable "kubernetes_version" {
   description = "Kubernetes version"
   type        = string
   default     = "1.28"
 }
 
-variable "node_instance_type" {
-  description = "Instance type for Kubernetes nodes"
-  type        = string
-  default     = "t3.medium"
+variable "node_instance_types" {
+  description = "Map of node instance types by node group"
+  type        = map(string)
+  default = {
+    system   = "t3.medium"
+    workload = "t3.large"
+    ml       = "m5.xlarge"
+  }
 }
 
 variable "min_nodes" {
@@ -88,7 +114,7 @@ variable "min_nodes" {
 variable "max_nodes" {
   description = "Maximum number of nodes in the cluster"
   type        = number
-  default     = 10
+  default     = 20
 }
 
 variable "enable_monitoring" {
@@ -106,7 +132,74 @@ variable "enable_ssl" {
 variable "domain_name" {
   description = "Domain name for the application"
   type        = string
-  default     = "decision.is"
+  default     = "decision.example.com"
+}
+
+variable "enable_backup" {
+  description = "Enable backup solution"
+  type        = bool
+  default     = true
+}
+
+variable "enable_secrets_management" {
+  description = "Enable secrets management (External Secrets Operator)"
+  type        = bool
+  default     = true
+}
+
+variable "enable_gitops" {
+  description = "Enable GitOps with ArgoCD"
+  type        = bool
+  default     = false
+}
+
+variable "enable_service_mesh" {
+  description = "Enable Istio service mesh"
+  type        = bool
+  default     = false
+}
+
+variable "enable_policy_engine" {
+  description = "Enable Open Policy Agent Gatekeeper"
+  type        = bool
+  default     = true
+}
+
+variable "postgres_password" {
+  description = "PostgreSQL password"
+  type        = string
+  sensitive   = true
+}
+
+variable "redis_auth_token" {
+  description = "Redis authentication token"
+  type        = string
+  sensitive   = true
+  default     = null
+}
+
+variable "enable_multi_region" {
+  description = "Enable multi-region deployment"
+  type        = bool
+  default     = false
+}
+
+variable "backup_retention_days" {
+  description = "Number of days to retain backups"
+  type        = number
+  default     = 30
+}
+
+variable "monitoring_retention_days" {
+  description = "Number of days to retain monitoring data"
+  type        = number
+  default     = 15
+}
+
+variable "cost_allocation_tags" {
+  description = "Additional tags for cost allocation"
+  type        = map(string)
+  default     = {}
 }
 
 # Data sources
@@ -122,7 +215,7 @@ locals {
     Environment = var.environment
     ManagedBy   = "terraform"
   }
-  
+
   name_prefix = "${var.project_name}-${var.environment}"
 }
 
@@ -130,7 +223,7 @@ locals {
 provider "aws" {
   alias  = "main"
   region = var.region
-  
+
   default_tags {
     tags = local.common_tags
   }
@@ -152,182 +245,186 @@ provider "azurerm" {
 # Networking Module
 module "networking" {
   source = "./modules/networking"
-  
+
   cloud_provider = var.cloud_provider
   environment    = var.environment
   project_name   = var.project_name
   region         = var.region
-  
+
   tags = local.common_tags
-  
+
   providers = {
-    aws    = aws.main
-    google = google.main
+    aws     = aws.main
+    google  = google.main
     azurerm = azurerm.main
   }
 }
 
 # Kubernetes Cluster Module
-module "kubernetes" {
+module "compute" {
   source = "./modules/compute"
-  
+
   cloud_provider     = var.cloud_provider
   environment        = var.environment
   project_name       = var.project_name
   region             = var.region
   kubernetes_version = var.kubernetes_version
-  node_instance_type = var.node_instance_type
+  node_instance_type = var.node_instance_types.workload
   min_nodes          = var.min_nodes
   max_nodes          = var.max_nodes
-  
-  vpc_id             = module.networking.vpc_id
-  subnet_ids         = module.networking.private_subnet_ids
-  
+
+  vpc_id     = module.networking.vpc_id
+  subnet_ids = module.networking.private_subnet_ids
+
   tags = local.common_tags
-  
+
   providers = {
-    aws    = aws.main
-    google = google.main
+    aws     = aws.main
+    google  = google.main
     azurerm = azurerm.main
   }
-  
+
   depends_on = [module.networking]
 }
 
 # Database Module
 module "database" {
   source = "./modules/database"
-  
+
   cloud_provider = var.cloud_provider
   environment    = var.environment
   project_name   = var.project_name
   region         = var.region
-  
-  vpc_id         = module.networking.vpc_id
-  subnet_ids     = module.networking.private_subnet_ids
-  
+
+  vpc_id     = module.networking.vpc_id
+  subnet_ids = module.networking.private_subnet_ids
+
+  postgres_password = var.postgres_password
+  redis_auth_token  = var.redis_auth_token
+
   tags = local.common_tags
-  
+
   providers = {
-    aws    = aws.main
-    google = google.main
+    aws     = aws.main
+    google  = google.main
     azurerm = azurerm.main
   }
-  
+
   depends_on = [module.networking]
 }
 
 # Storage Module (for ML models and data)
 module "storage" {
   source = "./modules/storage"
-  
+
   cloud_provider = var.cloud_provider
   environment    = var.environment
   project_name   = var.project_name
-  region         = var.region
-  
-  tags = local.common_tags
-  
+
+  common_tags = local.common_tags
+
   providers = {
-    aws    = aws.main
-    google = google.main
+    aws     = aws.main
+    google  = google.main
     azurerm = azurerm.main
   }
 }
 
 # Configure Kubernetes provider
 provider "kubernetes" {
-  host                   = module.kubernetes.cluster_endpoint
-  cluster_ca_certificate = base64decode(module.kubernetes.cluster_ca_certificate)
-  token                  = module.kubernetes.cluster_token
+  host                   = module.compute.cluster_endpoint
+  cluster_ca_certificate = base64decode(module.compute.cluster_ca_certificate)
+  token                  = module.compute.cluster_token
 }
 
 provider "helm" {
-  kubernetes {
-    host                   = module.kubernetes.cluster_endpoint
-    cluster_ca_certificate = base64decode(module.kubernetes.cluster_ca_certificate)
-    token                  = module.kubernetes.cluster_token
-  }
+  # The Helm provider will automatically use the kubernetes provider configuration
 }
 
 # Deploy application using Helm
 resource "helm_release" "decision_platform" {
-  name       = "decision-platform"
-  chart      = "../kubernetes/charts/decision"
-  namespace  = "decision"
+  name             = "decision-platform"
+  chart            = "../kubernetes/charts/decision"
+  namespace        = "decision"
   create_namespace = true
-  
+
   values = [
-    templatefile("${path.module}/helm-values/${var.environment}.yaml", {
-      environment     = var.environment
-      image_tag       = "latest"
-      domain_name     = var.domain_name
-      database_host   = module.database.database_endpoint
-      redis_host      = module.database.redis_endpoint
-      storage_bucket  = module.storage.bucket_name
+    yamlencode({
+      environment    = var.environment
+      image_tag      = "latest"
+      domain_name    = var.domain_name
+      database_host  = module.database.database_endpoint
+      redis_host     = module.database.redis_endpoint
+      storage_bucket = module.storage.storage_bucket_name
     })
   ]
-  
-  depends_on = [module.kubernetes]
+
+  depends_on = [module.compute]
 }
 
 # Monitoring stack (optional)
 resource "helm_release" "monitoring" {
   count = var.enable_monitoring ? 1 : 0
-  
-  name       = "kube-prometheus-stack"
-  repository = "https://prometheus-community.github.io/helm-charts"
-  chart      = "kube-prometheus-stack"
-  namespace  = "monitoring"
+
+  name             = "kube-prometheus-stack"
+  repository       = "https://prometheus-community.github.io/helm-charts"
+  chart            = "kube-prometheus-stack"
+  namespace        = "monitoring"
   create_namespace = true
-  version    = "45.0.0"
-  
+  version          = "45.0.0"
+
   values = [
     file("${path.module}/helm-values/monitoring.yaml")
   ]
-  
-  depends_on = [module.kubernetes]
+
+  depends_on = [module.compute]
 }
 
 # Ingress Controller
 resource "helm_release" "ingress_nginx" {
-  name       = "ingress-nginx"
-  repository = "https://kubernetes.github.io/ingress-nginx"
-  chart      = "ingress-nginx"
-  namespace  = "ingress-nginx"
+  name             = "ingress-nginx"
+  repository       = "https://kubernetes.github.io/ingress-nginx"
+  chart            = "ingress-nginx"
+  namespace        = "ingress-nginx"
   create_namespace = true
-  
-  set {
-    name  = "controller.service.type"
-    value = "LoadBalancer"
-  }
-  
-  depends_on = [module.kubernetes]
+
+  values = [
+    yamlencode({
+      controller = {
+        service = {
+          type = "LoadBalancer"
+        }
+      }
+    })
+  ]
+
+  depends_on = [module.compute]
 }
 
 # Cert Manager (for SSL certificates)
 resource "helm_release" "cert_manager" {
   count = var.enable_ssl ? 1 : 0
-  
-  name       = "cert-manager"
-  repository = "https://charts.jetstack.io"
-  chart      = "cert-manager"
-  namespace  = "cert-manager"
+
+  name             = "cert-manager"
+  repository       = "https://charts.jetstack.io"
+  chart            = "cert-manager"
+  namespace        = "cert-manager"
   create_namespace = true
-  version    = "v1.13.0"
-  
-  set {
-    name  = "installCRDs"
-    value = "true"
-  }
-  
-  depends_on = [module.kubernetes]
+  version          = "v1.13.0"
+
+  values = [
+    yamlencode({
+      installCRDs = true
+    })
+  ]
+
+  depends_on = [module.compute]
 }
 
 # Outputs
 output "cluster_endpoint" {
   description = "Kubernetes cluster endpoint"
-  value       = module.kubernetes.cluster_endpoint
+  value       = module.compute.cluster_endpoint
   sensitive   = true
 }
 
@@ -345,12 +442,12 @@ output "redis_endpoint" {
 
 output "storage_bucket" {
   description = "Storage bucket name"
-  value       = module.storage.bucket_name
+  value       = module.storage.storage_bucket_name
 }
 
 output "load_balancer_ip" {
   description = "Load balancer IP address"
-  value       = module.kubernetes.load_balancer_ip
+  value       = module.compute.load_balancer_ip
 }
 
 output "application_url" {

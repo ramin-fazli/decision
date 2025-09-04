@@ -1,0 +1,276 @@
+# ApplicationSet for Multi-Environment Deployment
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: decision-platform-environments
+  namespace: argo
+  labels:
+    app.kubernetes.io/name: decision-applicationset
+    app.kubernetes.io/part-of: decision-platform
+spec:
+  generators:
+  - clusters:
+      selector:
+        matchLabels:
+          environment: decision
+      values:
+        revision: HEAD
+        project: decision-platform
+  - git:
+      repoURL: https://github.com/your-org/decision
+      revision: HEAD
+      directories:
+      - path: infrastructure/kubernetes/environments/*
+      values:
+        revision: HEAD
+        project: decision-platform
+  template:
+    metadata:
+      name: 'decision-{{values.environment}}'
+      namespace: argo
+      labels:
+        app.kubernetes.io/name: decision-platform
+        app.kubernetes.io/part-of: decision-platform
+        environment: '{{values.environment}}'
+    spec:
+      project: '{{values.project}}'
+      source:
+        repoURL: https://github.com/your-org/decision
+        targetRevision: '{{values.revision}}'
+        path: '{{path}}'
+        helm:
+          valueFiles:
+            - values.yaml
+            - 'values-{{values.environment}}.yaml'
+          parameters:
+            - name: environment
+              value: '{{values.environment}}'
+            - name: cluster.name
+              value: '{{name}}'
+      destination:
+        server: '{{server}}'
+        namespace: decision
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        syncOptions:
+          - CreateNamespace=true
+---
+# Git Generator for Feature Branch Deployments
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: decision-feature-branches
+  namespace: argo
+  labels:
+    app.kubernetes.io/name: decision-feature-branches
+    app.kubernetes.io/part-of: decision-platform
+spec:
+  generators:
+  - git:
+      repoURL: https://github.com/your-org/decision
+      revision: HEAD
+      directories:
+      - path: infrastructure/kubernetes/environments/dev
+      branches:
+      - feature/*
+      - hotfix/*
+  template:
+    metadata:
+      name: 'decision-{{branch}}-{{path.basename}}'
+      namespace: argo
+      labels:
+        app.kubernetes.io/name: decision-platform
+        app.kubernetes.io/part-of: decision-platform
+        branch: '{{branch}}'
+      annotations:
+        argocd.argoproj.io/auto-delete: "true"
+    spec:
+      project: decision-platform
+      source:
+        repoURL: https://github.com/your-org/decision
+        targetRevision: '{{branch}}'
+        path: '{{path}}'
+        helm:
+          valueFiles:
+            - values.yaml
+            - values-dev.yaml
+          parameters:
+            - name: environment
+              value: 'feature-{{branch}}'
+            - name: image.tag
+              value: '{{branch}}-latest'
+            - name: ingress.host
+              value: '{{branch}}.dev.decision.example.com'
+      destination:
+        server: https://kubernetes.default.svc
+        namespace: 'decision-{{branch}}'
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        syncOptions:
+          - CreateNamespace=true
+---
+# Progressive Delivery with Rollouts
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: decision-progressive-delivery
+  namespace: argo
+  labels:
+    app.kubernetes.io/name: decision-progressive
+    app.kubernetes.io/part-of: decision-platform
+spec:
+  generators:
+  - list:
+      elements:
+      - environment: canary
+        weight: "10"
+        cluster: production
+      - environment: blue-green
+        weight: "100"
+        cluster: production
+  template:
+    metadata:
+      name: 'decision-{{environment}}'
+      namespace: argo
+      labels:
+        app.kubernetes.io/name: decision-platform
+        app.kubernetes.io/part-of: decision-platform
+        deployment-strategy: '{{environment}}'
+    spec:
+      project: decision-platform
+      source:
+        repoURL: https://github.com/your-org/decision
+        targetRevision: HEAD
+        path: infrastructure/kubernetes/rollouts
+        helm:
+          valueFiles:
+            - 'values-{{environment}}.yaml'
+          parameters:
+            - name: rollout.strategy
+              value: '{{environment}}'
+            - name: rollout.weight
+              value: '{{weight}}'
+      destination:
+        server: https://kubernetes.default.svc
+        namespace: decision
+      syncPolicy:
+        syncOptions:
+          - CreateNamespace=true
+---
+# Matrix Generator for Multi-Cluster Deployment
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: decision-multi-cluster
+  namespace: argo
+  labels:
+    app.kubernetes.io/name: decision-multi-cluster
+    app.kubernetes.io/part-of: decision-platform
+spec:
+  generators:
+  - matrix:
+      generators:
+      - clusters:
+          selector:
+            matchLabels:
+              decision-platform: "true"
+      - git:
+          repoURL: https://github.com/your-org/decision
+          revision: HEAD
+          directories:
+          - path: infrastructure/kubernetes/environments/*
+  template:
+    metadata:
+      name: 'decision-{{path.basename}}-{{name}}'
+      namespace: argo
+      labels:
+        app.kubernetes.io/name: decision-platform
+        app.kubernetes.io/part-of: decision-platform
+        cluster: '{{name}}'
+        environment: '{{path.basename}}'
+    spec:
+      project: decision-platform
+      source:
+        repoURL: https://github.com/your-org/decision
+        targetRevision: HEAD
+        path: '{{path}}'
+        helm:
+          valueFiles:
+            - values.yaml
+            - 'values-{{path.basename}}.yaml'
+            - 'values-{{name}}.yaml'
+          parameters:
+            - name: cluster.name
+              value: '{{name}}'
+            - name: cluster.region
+              value: '{{metadata.labels.region}}'
+            - name: environment
+              value: '{{path.basename}}'
+      destination:
+        server: '{{server}}'
+        namespace: decision
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        syncOptions:
+          - CreateNamespace=true
+        retry:
+          limit: 5
+          backoff:
+            duration: 5s
+            factor: 2
+            maxDuration: 3m
+---
+# ApplicationSet for Infrastructure Components
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: decision-infrastructure-components
+  namespace: argo
+  labels:
+    app.kubernetes.io/name: decision-infrastructure
+    app.kubernetes.io/part-of: decision-platform
+spec:
+  generators:
+  - git:
+      repoURL: https://github.com/your-org/decision
+      revision: HEAD
+      directories:
+      - path: infrastructure/kubernetes/infrastructure/*
+  template:
+    metadata:
+      name: 'infra-{{path.basename}}'
+      namespace: argo
+      labels:
+        app.kubernetes.io/name: '{{path.basename}}'
+        app.kubernetes.io/part-of: decision-platform
+        app.kubernetes.io/component: infrastructure
+      annotations:
+        argocd.argoproj.io/sync-wave: "-1"
+    spec:
+      project: decision-platform
+      source:
+        repoURL: https://github.com/your-org/decision
+        targetRevision: HEAD
+        path: '{{path}}'
+        helm:
+          valueFiles:
+            - values.yaml
+          parameters:
+            - name: component
+              value: '{{path.basename}}'
+      destination:
+        server: https://kubernetes.default.svc
+        namespace: '{{path.basename}}'
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        syncOptions:
+          - CreateNamespace=true
+          - ServerSideApply=true

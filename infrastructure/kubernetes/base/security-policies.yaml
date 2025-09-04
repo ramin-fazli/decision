@@ -1,0 +1,241 @@
+# Pod Security Standards and Security Context Configuration
+# PodSecurityPolicy for Decision Platform (for clusters that still support PSP)
+apiVersion: policy/v1beta1
+kind: PodSecurityPolicy
+metadata:
+  name: decision-restricted-psp
+  labels:
+    app.kubernetes.io/name: decision-psp
+    app.kubernetes.io/part-of: decision-platform
+spec:
+  privileged: false
+  allowPrivilegeEscalation: false
+  requiredDropCapabilities:
+    - ALL
+  volumes:
+    - 'configMap'
+    - 'emptyDir'
+    - 'projected'
+    - 'secret'
+    - 'downwardAPI'
+    - 'persistentVolumeClaim'
+    - 'csi'
+  hostNetwork: false
+  hostIPC: false
+  hostPID: false
+  runAsUser:
+    rule: 'MustRunAsNonRoot'
+  supplementalGroups:
+    rule: 'MustRunAs'
+    ranges:
+      - min: 1000
+        max: 65535
+  fsGroup:
+    rule: 'MustRunAs'
+    ranges:
+      - min: 1000
+        max: 65535
+  seLinux:
+    rule: 'RunAsAny'
+  readOnlyRootFilesystem: false
+  forbiddenSysctls:
+    - '*'
+---
+# Security Context Constraints for OpenShift (optional)
+apiVersion: security.openshift.io/v1
+kind: SecurityContextConstraints
+metadata:
+  name: decision-restricted-scc
+  labels:
+    app.kubernetes.io/name: decision-scc
+    app.kubernetes.io/part-of: decision-platform
+allowHostDirVolumePlugin: false
+allowHostIPC: false
+allowHostNetwork: false
+allowHostPID: false
+allowHostPorts: false
+allowPrivilegeEscalation: false
+allowPrivilegedContainer: false
+allowedCapabilities: null
+defaultAddCapabilities: null
+requiredDropCapabilities:
+- KILL
+- MKNOD
+- SETUID
+- SETGID
+fsGroup:
+  type: MustRunAs
+  ranges:
+    - min: 1000
+      max: 65535
+runAsUser:
+  type: MustRunAsNonRoot
+seLinuxContext:
+  type: MustRunAs
+supplementalGroups:
+  type: MustRunAs
+  ranges:
+    - min: 1000
+      max: 65535
+volumes:
+- configMap
+- downwardAPI
+- emptyDir
+- persistentVolumeClaim
+- projected
+- secret
+- csi
+users: []
+groups: []
+---
+# Example SecurityContext template for Decision Platform pods
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: decision-security-context-template
+  namespace: decision
+  labels:
+    app.kubernetes.io/name: security-template
+    app.kubernetes.io/part-of: decision-platform
+data:
+  backend-security-context.yaml: |
+    securityContext:
+      runAsNonRoot: true
+      runAsUser: 1001
+      runAsGroup: 1001
+      fsGroup: 1001
+      seccompProfile:
+        type: RuntimeDefault
+      capabilities:
+        drop:
+        - ALL
+      allowPrivilegeEscalation: false
+      readOnlyRootFilesystem: true
+    
+  frontend-security-context.yaml: |
+    securityContext:
+      runAsNonRoot: true
+      runAsUser: 1002
+      runAsGroup: 1002
+      fsGroup: 1002
+      seccompProfile:
+        type: RuntimeDefault
+      capabilities:
+        drop:
+        - ALL
+      allowPrivilegeEscalation: false
+      readOnlyRootFilesystem: true
+    
+  ml-worker-security-context.yaml: |
+    securityContext:
+      runAsNonRoot: true
+      runAsUser: 1003
+      runAsGroup: 1003
+      fsGroup: 1003
+      seccompProfile:
+        type: RuntimeDefault
+      capabilities:
+        drop:
+        - ALL
+        add:
+        - NET_BIND_SERVICE  # Only if needed for specific ML operations
+      allowPrivilegeEscalation: false
+      readOnlyRootFilesystem: false  # ML workers may need to write temporary files
+      supplementalGroups:
+      - 1003
+---
+# Resource Quotas for Decision namespace
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: decision-resource-quota
+  namespace: decision
+  labels:
+    app.kubernetes.io/name: resource-quota
+    app.kubernetes.io/part-of: decision-platform
+spec:
+  hard:
+    requests.cpu: "4"
+    requests.memory: 8Gi
+    limits.cpu: "8"
+    limits.memory: 16Gi
+    persistentvolumeclaims: "10"
+    pods: "20"
+    services: "10"
+    secrets: "20"
+    configmaps: "20"
+    count/deployments.apps: "10"
+    count/jobs.batch: "20"
+    count/cronjobs.batch: "5"
+---
+# Limit Ranges for Decision namespace
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: decision-limit-range
+  namespace: decision
+  labels:
+    app.kubernetes.io/name: limit-range
+    app.kubernetes.io/part-of: decision-platform
+spec:
+  limits:
+  - type: Container
+    default:
+      cpu: 500m
+      memory: 512Mi
+    defaultRequest:
+      cpu: 100m
+      memory: 128Mi
+    max:
+      cpu: "2"
+      memory: 4Gi
+    min:
+      cpu: 50m
+      memory: 64Mi
+  - type: Pod
+    max:
+      cpu: "4"
+      memory: 8Gi
+  - type: PersistentVolumeClaim
+    max:
+      storage: 100Gi
+    min:
+      storage: 1Gi
+---
+# Monitoring Resource Quotas
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: monitoring-resource-quota
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/name: monitoring-quota
+    app.kubernetes.io/part-of: decision-platform
+spec:
+  hard:
+    requests.cpu: "2"
+    requests.memory: 4Gi
+    limits.cpu: "4"
+    limits.memory: 8Gi
+    persistentvolumeclaims: "5"
+    pods: "10"
+    services: "5"
+---
+# Network Policy for Pod Security Standards enforcement
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: deny-privileged-containers
+  namespace: decision
+  labels:
+    app.kubernetes.io/name: security-enforcement
+    app.kubernetes.io/part-of: decision-platform
+spec:
+  podSelector:
+    matchExpressions:
+    - key: security.kubernetes.io/privileged
+      operator: Exists
+  policyTypes:
+  - Ingress
+  - Egress
+  # No ingress or egress rules = deny all traffic to/from privileged containers

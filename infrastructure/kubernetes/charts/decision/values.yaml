@@ -1,0 +1,568 @@
+# Default values for decision platform
+# This is a YAML-formatted file with comprehensive configuration options
+
+# Global configuration
+global:
+  imageRegistry: ""
+  imagePullSecrets: []
+  storageClass: ""
+  
+# Environment configuration
+environment: development
+nameOverride: ""
+fullnameOverride: ""
+
+# Image configuration
+image:
+  registry: docker.io
+  repository: decision-platform
+  tag: latest
+  pullPolicy: IfNotPresent
+  pullSecrets: []
+
+# Service account configuration
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""
+  automountServiceAccountToken: true
+
+# Security context
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1001
+  runAsGroup: 1001
+  fsGroup: 1001
+  seccompProfile:
+    type: RuntimeDefault
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  runAsNonRoot: true
+  runAsUser: 1001
+  runAsGroup: 1001
+  capabilities:
+    drop:
+      - ALL
+
+# Frontend (Next.js) configuration
+frontend:
+  enabled: true
+  name: frontend
+  image:
+    repository: decision-frontend
+    tag: latest
+    pullPolicy: IfNotPresent
+  
+  replicaCount: 2
+  
+  service:
+    type: ClusterIP
+    port: 3000
+    targetPort: 3000
+    annotations: {}
+  
+  # Resource limits and requests
+  resources:
+    limits:
+      cpu: 500m
+      memory: 512Mi
+    requests:
+      cpu: 100m
+      memory: 128Mi
+  
+  # Node selection
+  nodeSelector: {}
+  tolerations: []
+  affinity:
+    podAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - weight: 100
+          podAffinityTerm:
+            labelSelector:
+              matchExpressions:
+                - key: app.kubernetes.io/component
+                  operator: In
+                  values:
+                    - frontend
+            topologyKey: kubernetes.io/hostname
+  
+  # Health checks
+  livenessProbe:
+    httpGet:
+      path: /api/health
+      port: 3000
+    initialDelaySeconds: 30
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 3
+  
+  readinessProbe:
+    httpGet:
+      path: /api/health
+      port: 3000
+    initialDelaySeconds: 5
+    periodSeconds: 5
+    timeoutSeconds: 3
+    failureThreshold: 3
+  
+  # Environment variables
+  env:
+    NEXT_PUBLIC_API_URL: "http://backend:8000"
+    NODE_ENV: "production"
+  
+  # Config maps and secrets
+  configMaps: []
+  secrets: []
+  
+  # Volumes
+  volumes: []
+  volumeMounts: []
+
+# Backend (FastAPI) configuration
+backend:
+  enabled: true
+  name: backend
+  image:
+    repository: decision-backend
+    tag: latest
+    pullPolicy: IfNotPresent
+  
+  replicaCount: 3
+  
+  service:
+    type: ClusterIP
+    port: 8000
+    targetPort: 8000
+    annotations: {}
+  
+  # Resource limits and requests
+  resources:
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+    requests:
+      cpu: 200m
+      memory: 256Mi
+  
+  # Node selection
+  nodeSelector: {}
+  tolerations: []
+  affinity:
+    podAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - weight: 100
+          podAffinityTerm:
+            labelSelector:
+              matchExpressions:
+                - key: app.kubernetes.io/component
+                  operator: In
+                  values:
+                    - backend
+            topologyKey: kubernetes.io/hostname
+  
+  # Health checks
+  livenessProbe:
+    httpGet:
+      path: /health
+      port: 8000
+    initialDelaySeconds: 30
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 3
+  
+  readinessProbe:
+    httpGet:
+      path: /health
+      port: 8000
+    initialDelaySeconds: 10
+    periodSeconds: 5
+    timeoutSeconds: 3
+    failureThreshold: 3
+  
+  # Environment variables
+  env:
+    ENVIRONMENT: "production"
+    DEBUG: "false"
+    LOG_LEVEL: "INFO"
+    DATABASE_URL: ""  # Will be set by templates
+    REDIS_URL: ""     # Will be set by templates
+    MINIO_URL: ""     # Will be set by templates
+  
+  # Config maps and secrets
+  configMaps: []
+  secrets: []
+  
+  # Volumes
+  volumes:
+    - name: tmp
+      emptyDir: {}
+    - name: cache
+      emptyDir: {}
+  
+  volumeMounts:
+    - name: tmp
+      mountPath: /tmp
+    - name: cache
+      mountPath: /app/cache
+
+# ML Worker configuration
+mlWorker:
+  enabled: true
+  name: ml-worker
+  image:
+    repository: decision-backend
+    tag: latest
+    pullPolicy: IfNotPresent
+  
+  replicaCount: 2
+  
+  # Resource limits and requests (higher for ML workloads)
+  resources:
+    limits:
+      cpu: 2000m
+      memory: 4Gi
+      nvidia.com/gpu: 0  # Set to 1 if GPU support needed
+    requests:
+      cpu: 500m
+      memory: 1Gi
+  
+  # Node selection for ML workloads
+  nodeSelector:
+    node.kubernetes.io/instance-type: ml
+  tolerations:
+    - key: ml-workload
+      operator: Equal
+      value: "true"
+      effect: NoSchedule
+  affinity: {}
+  
+  # Environment variables
+  env:
+    WORKER_TYPE: "ml"
+    CELERY_BROKER_URL: ""  # Will be set by templates
+    CELERY_RESULT_BACKEND: ""  # Will be set by templates
+  
+  # Command override for worker
+  command:
+    - celery
+    - -A
+    - app.main
+    - worker
+    - --loglevel=info
+    - --concurrency=2
+  
+  # Volumes for ML models and data
+  volumes:
+    - name: ml-models
+      persistentVolumeClaim:
+        claimName: ml-models-pvc
+    - name: tmp
+      emptyDir: {}
+  
+  volumeMounts:
+    - name: ml-models
+      mountPath: /app/models
+    - name: tmp
+      mountPath: /tmp
+
+# Celery Beat Scheduler
+celeryBeat:
+  enabled: true
+  name: celery-beat
+  image:
+    repository: decision-backend
+    tag: latest
+    pullPolicy: IfNotPresent
+  
+  replicaCount: 1  # Only one scheduler needed
+  
+  resources:
+    limits:
+      cpu: 200m
+      memory: 256Mi
+    requests:
+      cpu: 50m
+      memory: 64Mi
+  
+  command:
+    - celery
+    - -A
+    - app.main
+    - beat
+    - --loglevel=info
+
+# Ingress configuration
+ingress:
+  enabled: true
+  className: "nginx"
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+  hosts:
+    - host: decision.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+          service:
+            name: frontend
+            port: 3000
+        - path: /api
+          pathType: Prefix
+          service:
+            name: backend
+            port: 8000
+        - path: /docs
+          pathType: Prefix
+          service:
+            name: backend
+            port: 8000
+  tls:
+    - secretName: decision-tls
+      hosts:
+        - decision.example.com
+
+# Horizontal Pod Autoscaler
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 70
+  targetMemoryUtilizationPercentage: 80
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+        - type: Percent
+          value: 10
+          periodSeconds: 60
+    scaleUp:
+      stabilizationWindowSeconds: 60
+      policies:
+        - type: Percent
+          value: 50
+          periodSeconds: 60
+
+# Pod Disruption Budget
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1
+  maxUnavailable: ""
+
+# Network Policies
+networkPolicy:
+  enabled: true
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              name: ingress-nginx
+        - namespaceSelector:
+            matchLabels:
+              name: monitoring
+      ports:
+        - protocol: TCP
+          port: 3000
+        - protocol: TCP
+          port: 8000
+  egress:
+    - to: []
+      ports:
+        - protocol: TCP
+          port: 53
+        - protocol: UDP
+          port: 53
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              name: database
+      ports:
+        - protocol: TCP
+          port: 5432
+        - protocol: TCP
+          port: 6379
+
+# Persistent Volume Claims
+persistence:
+  enabled: true
+  storageClass: ""
+  accessMode: ReadWriteOnce
+  size: 10Gi
+  annotations: {}
+  
+  # ML Models storage
+  mlModels:
+    enabled: true
+    storageClass: ""
+    accessMode: ReadWriteMany
+    size: 100Gi
+    annotations: {}
+
+# Database configuration
+postgresql:
+  enabled: false  # Using external database
+  auth:
+    postgresPassword: ""
+    username: decision
+    password: ""
+    database: decision
+  primary:
+    persistence:
+      enabled: true
+      size: 20Gi
+  metrics:
+    enabled: true
+
+# Redis configuration
+redis:
+  enabled: false  # Using external Redis
+  auth:
+    enabled: true
+    password: ""
+  master:
+    persistence:
+      enabled: true
+      size: 8Gi
+  metrics:
+    enabled: true
+
+# MinIO configuration
+minio:
+  enabled: false  # Using external object storage
+  auth:
+    rootUser: minio
+    rootPassword: ""
+  persistence:
+    enabled: true
+    size: 50Gi
+  metrics:
+    serviceMonitor:
+      enabled: true
+
+# Monitoring configuration
+monitoring:
+  enabled: true
+  
+  prometheus:
+    enabled: true
+    serviceMonitor:
+      enabled: true
+      interval: 30s
+      scrapeTimeout: 10s
+      labels: {}
+      annotations: {}
+  
+  grafana:
+    enabled: true
+    dashboards:
+      enabled: true
+      label: grafana_dashboard
+  
+  alerts:
+    enabled: true
+    rules:
+      - name: decision-platform
+        rules:
+          - alert: HighErrorRate
+            expr: rate(http_requests_total{status=~"5.."}[5m]) > 0.1
+            for: 5m
+            labels:
+              severity: warning
+            annotations:
+              summary: "High error rate detected"
+          - alert: HighMemoryUsage
+            expr: container_memory_usage_bytes / container_spec_memory_limit_bytes > 0.8
+            for: 5m
+            labels:
+              severity: warning
+            annotations:
+              summary: "High memory usage detected"
+
+# Service Mesh (Istio) configuration
+serviceMesh:
+  enabled: false
+  istio:
+    enabled: false
+    virtualService:
+      enabled: false
+    destinationRule:
+      enabled: false
+    gateway:
+      enabled: false
+
+# Backup configuration
+backup:
+  enabled: false
+  schedule: "0 2 * * *"  # Daily at 2 AM
+  retention: "30d"
+  destinations:
+    s3:
+      enabled: false
+      bucket: ""
+      region: ""
+
+# Migration jobs
+migrations:
+  enabled: true
+  image:
+    repository: decision-backend
+    tag: latest
+  restartPolicy: OnFailure
+  backoffLimit: 3
+  activeDeadlineSeconds: 600
+  ttlSecondsAfterFinished: 86400
+  resources:
+    limits:
+      cpu: 500m
+      memory: 512Mi
+    requests:
+      cpu: 100m
+      memory: 128Mi
+
+# External services configuration
+externalServices:
+  database:
+    host: ""
+    port: 5432
+    name: decision
+    username: decision
+    passwordSecret:
+      name: ""
+      key: ""
+  
+  redis:
+    host: ""
+    port: 6379
+    passwordSecret:
+      name: ""
+      key: ""
+  
+  objectStorage:
+    endpoint: ""
+    bucket: ""
+    accessKeySecret:
+      name: ""
+      key: ""
+    secretKeySecret:
+      name: ""
+      key: ""
+
+# Tests
+tests:
+  enabled: false
+  image:
+    repository: decision-backend
+    tag: latest
+  resources:
+    limits:
+      cpu: 500m
+      memory: 512Mi
+    requests:
+      cpu: 100m
+      memory: 128Mi

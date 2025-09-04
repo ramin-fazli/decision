@@ -1,0 +1,114 @@
+# Namespace Configuration
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: decision
+  labels:
+    name: decision
+    environment: base
+    app.kubernetes.io/name: decision-platform
+    app.kubernetes.io/part-of: decision-platform
+    istio-injection: enabled
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/warn: restricted
+  annotations:
+    linkerd.io/inject: enabled
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: decision-system
+  labels:
+    name: decision-system
+    environment: base
+    app.kubernetes.io/name: decision-system
+    app.kubernetes.io/part-of: decision-platform
+    control-plane: decision-controller-manager
+    pod-security.kubernetes.io/enforce: restricted
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: monitoring
+  labels:
+    name: monitoring
+    environment: base
+    app.kubernetes.io/name: monitoring
+    app.kubernetes.io/part-of: decision-platform
+    istio-injection: enabled
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ingress-nginx
+  labels:
+    name: ingress-nginx
+    environment: base
+    app.kubernetes.io/name: ingress-nginx
+    app.kubernetes.io/part-of: decision-platform
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: cert-manager
+  labels:
+    name: cert-manager
+    environment: base
+    app.kubernetes.io/name: cert-manager
+    app.kubernetes.io/part-of: decision-platform
+    certmanager.k8s.io/disable-validation: "true"
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: external-secrets
+  labels:
+    name: external-secrets
+    environment: base
+    app.kubernetes.io/name: external-secrets
+    app.kubernetes.io/part-of: decision-platform
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: argo
+  labels:
+    name: argo
+    environment: base
+    app.kubernetes.io/name: argocd
+    app.kubernetes.io/part-of: decision-platform
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: gatekeeper-system
+  labels:
+    name: gatekeeper-system
+    environment: base
+    app.kubernetes.io/name: gatekeeper
+    app.kubernetes.io/part-of: decision-platform
+    control-plane: controller-manager
+    gatekeeper.sh/system: "yes"
+    admission.gatekeeper.sh/ignore: no-self-managing
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: istio-system
+  labels:
+    name: istio-system
+    environment: base
+    app.kubernetes.io/name: istio-system
+    app.kubernetes.io/part-of: decision-platform
+    istio-injection: disabled
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: backup
+  labels:
+    name: backup
+    environment: base
+    app.kubernetes.io/name: backup
+    app.kubernetes.io/part-of: decision-platform
